@@ -504,7 +504,7 @@ log_('Sistema listo. Conecta el ESP32.');
       if ~st.connected || isempty(st.port) || ~isvalid(st.port); return; end
       nb = st.port.NumBytesAvailable;
       if nb == 0; return; end
-      raw_all = char(read(st.port, nb, 'uint8'))';
+      raw_all = char(read(st.port, nb, 'uint8'));
     catch; return; end
 
     % Extraer la última línea D, completa (frame más reciente)
