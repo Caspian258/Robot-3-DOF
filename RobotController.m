@@ -54,8 +54,8 @@ pnl = uipanel(mainGrid,'BackgroundColor',cPanel,'BorderType','none');
 pnl.Layout.Row=[1 2]; pnl.Layout.Column=1;
 pg = uigridlayout(pnl,[1,1]); pg.Padding=[8 8 8 8];
 
-pnlScroll = uigridlayout(pg,[23,1]);
-pnlScroll.RowHeight = {22,36,44,8, 22,36,36,36, 44,8, 22,36, 8, 22,44,44, 8,44,8, 36,44, 22,'1x'};
+pnlScroll = uigridlayout(pg,[24,1]);
+pnlScroll.RowHeight = {22,36,44,8, 22,36,36,36, 44,8, 22,36, 8, 22,44,44,36, 8,44,8, 36,44, 22,'1x'};
 pnlScroll.RowSpacing = 4;
 
 % DESTINO
@@ -97,6 +97,13 @@ btnStop = uibutton(pnlScroll,'push',...
   'Text','■  PARAR PRUEBA',...
   'BackgroundColor',[0.6 0.1 0.1],'FontWeight','bold','FontColor','w',...
   'Enable','off');
+gMotInd = uigridlayout(pnlScroll,[1,3]); gMotInd.Padding=[0 0 0 0]; gMotInd.ColumnSpacing=4;
+btnM1 = uibutton(gMotInd,'push','Text','▶ M1 Base',...
+  'BackgroundColor',motorColors{1},'FontColor',[0 0 0],'FontWeight','bold');
+btnM2 = uibutton(gMotInd,'push','Text','▶ M2 Hombro',...
+  'BackgroundColor',motorColors{2},'FontColor',[0 0 0],'FontWeight','bold');
+btnM3 = uibutton(gMotInd,'push','Text','▶ M3 Codo',...
+  'BackgroundColor',motorColors{3},'FontColor',[0 0 0],'FontWeight','bold');
 uilabel(pnlScroll,'Text','');
 
 % CONEXIÓN
@@ -156,6 +163,9 @@ btnPD.ButtonPushedFcn      = @(~,~) enviarControl();
 btnZero.ButtonPushedFcn    = @(~,~) ceroRobot();
 btnTest.ButtonPushedFcn    = @(~,~) testMotores();
 btnStop.ButtonPushedFcn    = @(~,~) pararPrueba();
+btnM1.ButtonPushedFcn      = @(~,~) testMotorUnico(1);
+btnM2.ButtonPushedFcn      = @(~,~) testMotorUnico(2);
+btnM3.ButtonPushedFcn      = @(~,~) testMotorUnico(3);
 cbQ.ValueChangedFcn        = @(~,~) refrescarGrafica();
 cbE.ValueChangedFcn        = @(~,~) refrescarGrafica();
 cbPW.ValueChangedFcn       = @(~,~) refrescarGrafica();
@@ -327,6 +337,50 @@ log_('Sistema listo. Conecta el ESP32.');
     try; configureCallback(st.port, "terminator", @(~,~) leerTelemetria()); catch; end
     btnTest.Enable = 'on';
     btnTest.Text   = '▶  VERIFICAR LOS 3 MOTORES';
+    btnStop.Enable = 'off';
+  end
+
+% ============================================================
+%  TEST MOTOR INDIVIDUAL
+% ============================================================
+  function testMotorUnico(motorIdx)
+    st = getSt();
+    if ~st.connected; log_('[!] Conecta el ESP32 primero.'); return; end
+
+    TEST_DEG = 15.0;
+    DEADBAND = 6.0;
+    TIMEOUT  = 20.0;
+    nombre = motorNames{motorIdx};
+
+    btnM1.Enable='off'; btnM2.Enable='off'; btnM3.Enable='off';
+    btnStop.Enable = 'on';
+    st = getSt(); st.testMode=true; st.stopTest=false; setSt(st);
+    try; configureCallback(st.port,'off'); catch; end
+    try; flush(st.port); catch; end
+
+    log_('');
+    log_(sprintf('── Test individual: %s ──', nombre));
+    enviarCmd('T,0.00,0.00,0.00');
+    esperarPosicionMulti([0 0 0], DEADBAND, 5.0);
+
+    if ~getappdata(fig,'st').stopTest
+      tq = [0.0, 0.0, 0.0]; tq(motorIdx) = TEST_DEG;
+      enviarCmd(sprintf('T,%.2f,%.2f,%.2f', tq(1), tq(2), tq(3)));
+      log_(sprintf('  → %.0f°', TEST_DEG));
+      ok1 = esperarPosicion(motorIdx, TEST_DEG, DEADBAND, TIMEOUT);
+
+      enviarCmd('T,0.00,0.00,0.00');
+      log_('  ← 0°');
+      ok2 = esperarPosicion(motorIdx, 0.0, DEADBAND, TIMEOUT);
+
+      if ok1 && ok2; log_(sprintf('  %s: ✓ OK', nombre));
+      else;          log_(sprintf('  %s: ✗ Revisar', nombre)); end
+    end
+
+    if ~isvalid(fig); return; end
+    st = getSt(); st.testMode=false; st.stopTest=false; setSt(st);
+    try; configureCallback(st.port,"terminator",@(~,~) leerTelemetria()); catch; end
+    btnM1.Enable='on'; btnM2.Enable='on'; btnM3.Enable='on';
     btnStop.Enable = 'off';
   end
 
