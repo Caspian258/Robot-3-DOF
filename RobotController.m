@@ -507,7 +507,7 @@ log_('Sistema listo. Conecta el ESP32.');
     catch; return; end
 
     % Extraer la última línea D, completa (frame más reciente)
-    lines = strsplit(raw_all, newline);
+    lines = strsplit(raw_all, char(10));
     raw = '';
     for k = numel(lines):-1:1
       candidate = strtrim(lines{k});
