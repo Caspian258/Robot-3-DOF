@@ -1,167 +1,255 @@
-// =============================================================================
-// Robot 3-DOF — Firmware ESP32 para MATLAB (Serial USB)
-// Protocolo: MATLAB envía "SP:deg1,deg2,deg3\n"  (setpoints en grados)
-//            ESP32 responde "POS:deg1,deg2,deg3\n" (posiciones actuales)
-//            MATLAB puede enviar "KP:valor\n" y "KD:valor\n"
-//            MATLAB puede enviar "RST\n" para resetear encoders
-// =============================================================================
-// PINS VERIFICADOS FÍSICAMENTE
-//   M1: ENC_A=18  ENC_B=19  IN1=25  IN2=26  ENA=27
-//   M2: ENC_A=32  ENC_B=33  IN1=21  IN2=22  ENA=23
-//   M3: ENC_A=34  ENC_B=35  IN1=13  IN2=14  ENA=16
-// =============================================================================
+#include <Arduino.h>
 
-#define NUM_MOTORS     3
-#define COUNTS_PER_REV 994.0f   // Actualizado por usuario
-#define MIN_PWM        18.0f    // Stiction deadband
-#define PWM_FREQ       20000
-#define PWM_BITS       8
-#define CONTROL_HZ     50       // Frecuencia de control (ms)
-#define SERIAL_HZ      20       // Frecuencia de reporte a MATLAB (ms)
+// =============================================================
+//  Robot RRR 3DOF - Firmware ESP32
+//  Control PD con estado HOLDING: al estabilizarse corta energía
+//  y no vuelve a escribir pines hasta recibir nuevo target.
+// =============================================================
 
-// ── Pins ──────────────────────────────────────────────────────────────────────
-const int PIN_ENC_A[NUM_MOTORS] = {18, 32, 34};
-const int PIN_ENC_B[NUM_MOTORS] = {19, 33, 35};
-const int PIN_IN1  [NUM_MOTORS] = {25, 21, 13};
-const int PIN_IN2  [NUM_MOTORS] = {26, 22, 14};
-const int PIN_ENA  [NUM_MOTORS] = {27, 23, 16};
-const int PWM_CH   [NUM_MOTORS] = { 0,  1,  2};
+// --- PINES DE POTENCIA (verificados físicamente) ---
+const int M1_IN1 = 15; const int M1_IN2 = 2;  const int M1_ENA = 25;
+const int M2_IN1 = 21; const int M2_IN2 = 22; const int M2_ENA = 23;
+const int M3_IN1 = 26; const int M3_IN2 = 27; const int M3_ENA = 17;
 
-// ── Estado ────────────────────────────────────────────────────────────────────
-volatile long encoderCount[NUM_MOTORS] = {0, 0, 0};
-float setpoint_deg[NUM_MOTORS]         = {0, 0, 0};
-float prevError   [NUM_MOTORS]         = {0, 0, 0};
-float Kp = 2.5f;
-float Kd = 0.08f;
+// --- PINES DE ENCODERS (verificados físicamente) ---
+const int M1_ENCA = 18; const int M1_ENCB = 19;
+const int M2_ENCA = 32; const int M2_ENCB = 33;
+const int M3_ENCA = 4;  const int M3_ENCB = 5;
 
-unsigned long prevControlTime = 0;
-unsigned long prevSerialTime  = 0;
+// --- CONSTANTES ---
+const float PULSOS_POR_VUELTA = 1200.0f;
 
-// ── ISRs ──────────────────────────────────────────────────────────────────────
-void IRAM_ATTR isr0() { encoderCount[0] += digitalRead(PIN_ENC_B[0]) ? 1 : -1; }
-void IRAM_ATTR isr1() { encoderCount[1] += digitalRead(PIN_ENC_B[1]) ? 1 : -1; }
-void IRAM_ATTR isr2() { encoderCount[2] += digitalRead(PIN_ENC_B[2]) ? 1 : -1; }
+// --- TARGETS Y POSICIÓN ---
+float target_q[3]  = {0.0f, 0.0f, 0.0f};
+float current_q[3] = {0.0f, 0.0f, 0.0f};
 
-// ── Motor output ──────────────────────────────────────────────────────────────
-void setMotor(int i, float output) {
-  int duty = (int)constrain(fabsf(output), 0, 255);
-  if (output > 0.5f) {
-    digitalWrite(PIN_IN1[i], HIGH);
-    digitalWrite(PIN_IN2[i], LOW);
-    ledcWrite(PWM_CH[i], duty + (int)MIN_PWM);
-  } else if (output < -0.5f) {
-    digitalWrite(PIN_IN1[i], LOW);
-    digitalWrite(PIN_IN2[i], HIGH);
-    ledcWrite(PWM_CH[i], duty + (int)MIN_PWM);
-  } else {
-    digitalWrite(PIN_IN1[i], LOW);
-    digitalWrite(PIN_IN2[i], LOW);
-    ledcWrite(PWM_CH[i], 0);
-  }
+// --- GANANCIAS PD ---
+float Kp[3] = {2.0f,  2.5f,  2.5f};
+float Kd[3] = {0.05f, 0.05f, 0.05f};
+
+// --- ZONA MUERTA (grados) — 5° validado en prueba física ---
+float deadband[3] = {5.0f, 5.0f, 5.0f};
+
+// --- ESTADO POR MOTOR ---
+// false = controlando activamente, true = ya llegó y está en reposo
+bool holding[3] = {false, false, false};
+
+// --- CONTADORES DE ENCODER ---
+volatile long encCount[3] = {0, 0, 0};
+
+// --- PD internos ---
+float prev_error[3]     = {0, 0, 0};
+unsigned long last_t[3] = {0, 0, 0};
+int pwm_out[3]          = {0, 0, 0};
+
+// ---------------------------------------------------------------
+//  ISRs — Quadratura completa (CHANGE en A y B)
+// ---------------------------------------------------------------
+void IRAM_ATTR isr_M1_A() {
+  encCount[0] += (digitalRead(M1_ENCA) == digitalRead(M1_ENCB)) ? 1 : -1;
+}
+void IRAM_ATTR isr_M1_B() {
+  encCount[0] += (digitalRead(M1_ENCA) != digitalRead(M1_ENCB)) ? 1 : -1;
+}
+void IRAM_ATTR isr_M2_A() {
+  encCount[1] += (digitalRead(M2_ENCA) == digitalRead(M2_ENCB)) ? 1 : -1;
+}
+void IRAM_ATTR isr_M2_B() {
+  encCount[1] += (digitalRead(M2_ENCA) != digitalRead(M2_ENCB)) ? 1 : -1;
+}
+void IRAM_ATTR isr_M3_A() {
+  encCount[2] += (digitalRead(M3_ENCA) == digitalRead(M3_ENCB)) ? 1 : -1;
+}
+void IRAM_ATTR isr_M3_B() {
+  encCount[2] += (digitalRead(M3_ENCA) != digitalRead(M3_ENCB)) ? 1 : -1;
 }
 
-// ── Parser Serial ─────────────────────────────────────────────────────────────
-void parseSerial(String line) {
-  line.trim();
+// ---------------------------------------------------------------
+//  Prototipos
+// ---------------------------------------------------------------
+void controlMotor(int idx, int in1, int in2, int ena);
+void apagarMotor(int in1, int in2, int ena);
+void procesarSerial();
 
-  // SP:90.0,45.0,-30.0
-  if (line.startsWith("SP:")) {
-    String data = line.substring(3);
-    int c1 = data.indexOf(',');
-    int c2 = data.indexOf(',', c1 + 1);
-    if (c1 > 0 && c2 > c1) {
-      setpoint_deg[0] = data.substring(0, c1).toFloat();
-      setpoint_deg[1] = data.substring(c1 + 1, c2).toFloat();
-      setpoint_deg[2] = data.substring(c2 + 1).toFloat();
-    }
-  }
-  // KP:3.5
-  else if (line.startsWith("KP:")) {
-    Kp = line.substring(3).toFloat();
-  }
-  // KD:0.1
-  else if (line.startsWith("KD:")) {
-    Kd = line.substring(3).toFloat();
-  }
-  // RST — resetear encoders a cero
-  else if (line == "RST") {
-    for (int i = 0; i < NUM_MOTORS; i++) {
-      encoderCount[i] = 0;
-      setpoint_deg[i] = 0;
-      prevError[i]    = 0;
-      setMotor(i, 0);
-    }
-    Serial.println("ACK:RST");
-  }
-  // STOP — apagar motores sin resetear
-  else if (line == "STOP") {
-    for (int i = 0; i < NUM_MOTORS; i++) {
-      setpoint_deg[i] = (encoderCount[i] / COUNTS_PER_REV) * 360.0f;
-    }
-    Serial.println("ACK:STOP");
-  }
-}
-
-// ── Setup ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------
+//  SETUP
+// ---------------------------------------------------------------
 void setup() {
   Serial.begin(115200);
 
-  for (int i = 0; i < NUM_MOTORS; i++) {
-    pinMode(PIN_IN1[i], OUTPUT);
-    pinMode(PIN_IN2[i], OUTPUT);
-    ledcSetup(PWM_CH[i], PWM_FREQ, PWM_BITS);
-    ledcAttachPin(PIN_ENA[i], PWM_CH[i]);
+  // Pines de potencia — expandidos explícitamente
+  pinMode(M1_IN1, OUTPUT); pinMode(M1_IN2, OUTPUT); pinMode(M1_ENA, OUTPUT);
+  pinMode(M2_IN1, OUTPUT); pinMode(M2_IN2, OUTPUT); pinMode(M2_ENA, OUTPUT);
+  pinMode(M3_IN1, OUTPUT); pinMode(M3_IN2, OUTPUT); pinMode(M3_ENA, OUTPUT);
+  apagarMotor(M1_IN1, M1_IN2, M1_ENA);
+  apagarMotor(M2_IN1, M2_IN2, M2_ENA);
+  apagarMotor(M3_IN1, M3_IN2, M3_ENA);
 
-    bool hasPullup = (PIN_ENC_A[i] < 34);
-    pinMode(PIN_ENC_A[i], hasPullup ? INPUT_PULLUP : INPUT);
-    pinMode(PIN_ENC_B[i], hasPullup ? INPUT_PULLUP : INPUT);
-  }
+  // Encoders
+  pinMode(M1_ENCA, INPUT_PULLUP); pinMode(M1_ENCB, INPUT_PULLUP);
+  pinMode(M2_ENCA, INPUT_PULLUP); pinMode(M2_ENCB, INPUT_PULLUP);
+  pinMode(M3_ENCA, INPUT_PULLUP); pinMode(M3_ENCB, INPUT_PULLUP);
 
-  attachInterrupt(digitalPinToInterrupt(PIN_ENC_A[0]), isr0, RISING);
-  attachInterrupt(digitalPinToInterrupt(PIN_ENC_A[1]), isr1, RISING);
-  attachInterrupt(digitalPinToInterrupt(PIN_ENC_A[2]), isr2, RISING);
+  attachInterrupt(digitalPinToInterrupt(M1_ENCA), isr_M1_A, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(M1_ENCB), isr_M1_B, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(M2_ENCA), isr_M2_A, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(M2_ENCB), isr_M2_B, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(M3_ENCA), isr_M3_A, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(M3_ENCB), isr_M3_B, CHANGE);
 
-  Serial.println("READY:Robot3DOF");
+  Serial.println("READY");
 }
 
-// ── Loop ──────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------
+//  LOOP
+// ---------------------------------------------------------------
 void loop() {
-  unsigned long now = millis();
+  procesarSerial();
 
-  // ── Leer Serial ─────────────────────────────────────────────────────────
-  if (Serial.available()) {
-    String line = Serial.readStringUntil('\n');
-    parseSerial(line);
-  }
+  // Leer encoders de forma atómica
+  noInterrupts();
+  long c0 = encCount[0], c1 = encCount[1], c2 = encCount[2];
+  interrupts();
 
-  // ── Control PD @ CONTROL_HZ ─────────────────────────────────────────────
-  float dt = (now - prevControlTime) / 1000.0f;
-  if (dt >= (1.0f / CONTROL_HZ)) {
-    prevControlTime = now;
-    for (int i = 0; i < NUM_MOTORS; i++) {
-      float angle = (encoderCount[i] / COUNTS_PER_REV) * 360.0f;
-      float error = setpoint_deg[i] - angle;
-      float deriv = (error - prevError[i]) / dt;
-      float output = (Kp * error) + (Kd * deriv);
-      output = constrain(output, -255, 255);
-      prevError[i] = error;
-      setMotor(i, output);
+  current_q[0] = (c0 / PULSOS_POR_VUELTA) * 360.0f;
+  current_q[1] = (c1 / PULSOS_POR_VUELTA) * 360.0f;
+  current_q[2] = (c2 / PULSOS_POR_VUELTA) * 360.0f;
+
+  controlMotor(0, M1_IN1, M1_IN2, M1_ENA);
+  controlMotor(1, M2_IN1, M2_IN2, M2_ENA);
+  controlMotor(2, M3_IN2, M3_IN1, M3_ENA);  // M3 invertido físicamente: IN1↔IN2
+
+  // Telemetría: D,q1,q2,q3,e1,e2,e3,pwm1,pwm2,pwm3
+  float e[3];
+  for (int i = 0; i < 3; i++) e[i] = target_q[i] - current_q[i];
+
+  Serial.print("D,");
+  Serial.print(current_q[0], 2); Serial.print(",");
+  Serial.print(current_q[1], 2); Serial.print(",");
+  Serial.print(current_q[2], 2); Serial.print(",");
+  Serial.print(e[0], 3);         Serial.print(",");
+  Serial.print(e[1], 3);         Serial.print(",");
+  Serial.print(e[2], 3);         Serial.print(",");
+  Serial.print(pwm_out[0]);      Serial.print(",");
+  Serial.print(pwm_out[1]);      Serial.print(",");
+  Serial.println(pwm_out[2]);
+
+  delay(10);
+}
+
+// ---------------------------------------------------------------
+//  Control PD con estado HOLDING
+//
+//  Estados:
+//    holding=false → aplica PD normalmente
+//    holding=true  → motor en reposo total (no escribe pines),
+//                    solo monitorea si el error crece de nuevo
+//                    (p.ej. perturbación externa) para reactivar.
+// ---------------------------------------------------------------
+void controlMotor(int idx, int in1, int in2, int ena) {
+  float error = target_q[idx] - current_q[idx];
+
+  if (holding[idx]) {
+    // Ya estabilizado. Si algo mueve el brazo más allá del doble
+    // de la zona muerta, reactivar el control.
+    if (fabsf(error) > deadband[idx] * 2.0f) {
+      holding[idx] = false;
+    } else {
+      pwm_out[idx] = 0;
+      return;  // No tocar los pines — silencio total
     }
   }
 
-  // ── Reporte a MATLAB @ SERIAL_HZ ────────────────────────────────────────
-  if ((now - prevSerialTime) >= (1000 / SERIAL_HZ)) {
-    prevSerialTime = now;
-    float a0 = (encoderCount[0] / COUNTS_PER_REV) * 360.0f;
-    float a1 = (encoderCount[1] / COUNTS_PER_REV) * 360.0f;
-    float a2 = (encoderCount[2] / COUNTS_PER_REV) * 360.0f;
-    // Formato: POS:deg1,deg2,deg3,sp1,sp2,sp3
-    Serial.print("POS:");
-    Serial.print(a0, 2); Serial.print(",");
-    Serial.print(a1, 2); Serial.print(",");
-    Serial.print(a2, 2); Serial.print(",");
-    Serial.print(setpoint_deg[0], 2); Serial.print(",");
-    Serial.print(setpoint_deg[1], 2); Serial.print(",");
-    Serial.println(setpoint_deg[2], 2);
+  // Dentro de zona muerta → apagar UNA vez y marcar holding
+  if (fabsf(error) < deadband[idx]) {
+    apagarMotor(in1, in2, ena);
+    pwm_out[idx]    = 0;
+    prev_error[idx] = error;
+    last_t[idx]     = millis();
+    holding[idx]    = true;
+    return;
+  }
+
+  // Control PD activo
+  unsigned long now = millis();
+  float dt = (now - last_t[idx]) / 1000.0f;
+  if (dt <= 0.0f) dt = 0.01f;
+
+  float derivative = (error - prev_error[idx]) / dt;
+  int power = (int)(fabsf(error * Kp[idx] + derivative * Kd[idx]));
+  if (power > 255) power = 255;
+  if (power < 30)  power = 30;   // mínimo para vencer fricción estática
+
+  pwm_out[idx]    = power;
+  prev_error[idx] = error;
+  last_t[idx]     = now;
+
+  if (error > 0) {
+    digitalWrite(in1, HIGH); digitalWrite(in2, LOW);
+  } else {
+    digitalWrite(in1, LOW);  digitalWrite(in2, HIGH);
+  }
+  analogWrite(ena, power);
+}
+
+// Freno activo L298N: IN1=IN2=LOW + ENA=255 → brake-to-GND
+// Reduce overshoot significativamente vs coast (ENA=0)
+void apagarMotor(int in1, int in2, int ena) {
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+  analogWrite(ena, 255);
+}
+
+// ---------------------------------------------------------------
+//  Parser serial
+//  T,q1,q2,q3     → nuevo target (resetea holding)
+//  K1/K2/K3,Kp,Kd → ganancias
+//  DB,d1,d2,d3    → deadband
+//  ZERO           → reset encoders
+// ---------------------------------------------------------------
+void procesarSerial() {
+  while (Serial.available() > 0) {
+    String data = Serial.readStringUntil('\n');
+    data.trim();
+    if (data.length() == 0) continue;
+
+    if (data.startsWith("T,")) {
+      int c1 = data.indexOf(',', 2);
+      int c2 = data.indexOf(',', c1 + 1);
+      if (c1 > 0 && c2 > 0) {
+        target_q[0] = data.substring(2,    c1).toFloat();
+        target_q[1] = data.substring(c1+1, c2).toFloat();
+        target_q[2] = data.substring(c2+1).toFloat();
+        // Nuevo target → salir de holding en todos los motores
+        holding[0] = holding[1] = holding[2] = false;
+      }
+
+    } else if (data.startsWith("K") && data.length() > 3 && data.charAt(2) == ',') {
+      int idx = data.charAt(1) - '1';
+      if (idx >= 0 && idx < 3) {
+        int c1 = data.indexOf(',', 3);
+        if (c1 > 0) {
+          Kp[idx] = data.substring(3, c1).toFloat();
+          Kd[idx] = data.substring(c1 + 1).toFloat();
+        }
+      }
+
+    } else if (data.startsWith("DB,")) {
+      int c1 = data.indexOf(',', 3);
+      int c2 = data.indexOf(',', c1 + 1);
+      if (c1 > 0 && c2 > 0) {
+        deadband[0] = data.substring(3,    c1).toFloat();
+        deadband[1] = data.substring(c1+1, c2).toFloat();
+        deadband[2] = data.substring(c2+1).toFloat();
+      }
+
+    } else if (data.equals("ZERO")) {
+      noInterrupts();
+      encCount[0] = encCount[1] = encCount[2] = 0;
+      interrupts();
+      target_q[0] = target_q[1] = target_q[2] = 0.0f;
+      holding[0]  = holding[1]  = holding[2]  = false;
+      Serial.println("ZEROED");
+    }
   }
 }
