@@ -257,6 +257,13 @@ void procesarSerial() {
       holding[0]  = holding[1]  = holding[2]  = false;
       armed = true;
       Serial.println("ZEROED");
+
+    } else if (data.equals("DISARM")) {
+      armed = false;
+      apagarMotor(M1_IN1, M1_IN2, M1_ENA);
+      apagarMotor(M2_IN1, M2_IN2, M2_ENA);
+      apagarMotor(M3_IN1, M3_IN2, M3_ENA);
+      Serial.println("DISARMED");
     }
   }
 }

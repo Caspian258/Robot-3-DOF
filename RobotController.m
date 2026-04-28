@@ -182,6 +182,7 @@ log_('Sistema listo. Conecta el ESP32.');
         configureCallback(st.port, "terminator", @(~,~) leerTelemetria());
         btnConnect.Text = 'DESCONECTAR';
         btnConnect.BackgroundColor = cRed;
+        writeline(st.port, 'DISARM');
         enviarPD(); enviarDeadband();
         % Crear header del CSV al conectar (modo write, limpia el anterior)
         lf = fopen('robot_log.csv','w');
