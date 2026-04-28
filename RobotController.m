@@ -54,7 +54,7 @@ pnl.Layout.Row=[1 2]; pnl.Layout.Column=1;
 pg = uigridlayout(pnl,[1,1]); pg.Padding=[8 8 8 8];
 
 pnlScroll = uigridlayout(pg,[22,1]);
-pnlScroll.RowHeight = {22,36,44,8, 22,36,36,36, 44,8, 22,36, 8, 22,44, 8,44,8, 36,44, 22,120};
+pnlScroll.RowHeight = {22,36,44,8, 22,36,36,36, 44,8, 22,36, 8, 22,44, 8,44,8, 36,44, 22,'1x'};
 pnlScroll.RowSpacing = 4;
 
 % DESTINO
