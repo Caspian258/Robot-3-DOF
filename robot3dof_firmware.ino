@@ -24,7 +24,7 @@ float target_q[3]  = {0.0f, 0.0f, 0.0f};
 float current_q[3] = {0.0f, 0.0f, 0.0f};
 
 // --- GANANCIAS PD ---
-float Kp[3] = {2.0f,  2.5f,  2.5f};
+float Kp[3] = {10.0f, 10.0f, 10.0f};
 float Kd[3] = {0.05f, 0.05f, 0.05f};
 
 // --- ZONA MUERTA (grados) — 5° validado en prueba física ---

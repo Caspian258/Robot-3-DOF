@@ -73,9 +73,9 @@ uilabel(pnlScroll,'Text','');
 
 % GANANCIAS PD
 mkLabel(pnlScroll,'▸ GANANCIAS PD', 14, cWarn);
-[efP1,efD1] = motorRow(pnlScroll,'M1 Base  ', motorColors{1}, 2.0, 0.05);
-[efP2,efD2] = motorRow(pnlScroll,'M2 Hombro', motorColors{2}, 2.5, 0.05);
-[efP3,efD3] = motorRow(pnlScroll,'M3 Codo  ', motorColors{3}, 2.5, 0.05);
+[efP1,efD1] = motorRow(pnlScroll,'M1 Base  ', motorColors{1}, 10.0, 0.05);
+[efP2,efD2] = motorRow(pnlScroll,'M2 Hombro', motorColors{2}, 10.0, 0.05);
+[efP3,efD3] = motorRow(pnlScroll,'M3 Codo  ', motorColors{3}, 10.0, 0.05);
 btnPD = uibutton(pnlScroll,'push','Text','↻  ACTUALIZAR GANANCIAS',...
   'BackgroundColor',cWarn,'FontWeight','bold','FontColor',[0 0 0]);
 uilabel(pnlScroll,'Text','');
