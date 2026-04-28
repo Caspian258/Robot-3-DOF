@@ -34,6 +34,9 @@ float deadband[3] = {5.0f, 5.0f, 5.0f};
 // false = controlando activamente, true = ya llegó y está en reposo
 bool holding[3] = {false, false, false};
 
+// Espera primer comando T, antes de activar el control
+bool armed = false;
+
 // --- CONTADORES DE ENCODER ---
 volatile long encCount[3] = {0, 0, 0};
 
@@ -115,9 +118,11 @@ void loop() {
   current_q[1] = (c1 / PULSOS_POR_VUELTA) * 360.0f;
   current_q[2] = (c2 / PULSOS_POR_VUELTA) * 360.0f;
 
-  controlMotor(0, M1_IN1, M1_IN2, M1_ENA);
-  controlMotor(1, M2_IN1, M2_IN2, M2_ENA);
-  controlMotor(2, M3_IN2, M3_IN1, M3_ENA);  // M3 invertido físicamente: IN1↔IN2
+  if (armed) {
+    controlMotor(0, M1_IN1, M1_IN2, M1_ENA);
+    controlMotor(1, M2_IN1, M2_IN2, M2_ENA);
+    controlMotor(2, M3_IN2, M3_IN1, M3_ENA);  // M3 invertido físicamente: IN1↔IN2
+  }
 
   // Telemetría: D,q1,q2,q3,e1,e2,e3,pwm1,pwm2,pwm3
   float e[3];
@@ -222,6 +227,7 @@ void procesarSerial() {
         target_q[2] = data.substring(c2+1).toFloat();
         // Nuevo target → salir de holding en todos los motores
         holding[0] = holding[1] = holding[2] = false;
+        armed = true;
       }
 
     } else if (data.startsWith("K") && data.length() > 3 && data.charAt(2) == ',') {
@@ -249,6 +255,7 @@ void procesarSerial() {
       interrupts();
       target_q[0] = target_q[1] = target_q[2] = 0.0f;
       holding[0]  = holding[1]  = holding[2]  = false;
+      armed = true;
       Serial.println("ZEROED");
     }
   }
