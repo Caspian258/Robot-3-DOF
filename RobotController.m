@@ -33,12 +33,13 @@ initState = struct(...
   'data_e',    zeros(3,0), ...
   'data_pwm',  zeros(3,0), ...
   't0',        0, ...
-  'testMode',  false ...
+  'testMode',  false, ...
+  'stopTest',  false ...
 );
 
 % ── FIGURA ──
 fig = uifigure('Name','Robot RRR 3DOF — Control PD', 'Color', cBg);
-fig.Position(3:4) = [1400 840];
+fig.Position(3:4) = [1600 980];
 setappdata(fig,'st', initState);
 
 mainGrid = uigridlayout(fig, [2,2]);
@@ -53,8 +54,8 @@ pnl = uipanel(mainGrid,'BackgroundColor',cPanel,'BorderType','none');
 pnl.Layout.Row=[1 2]; pnl.Layout.Column=1;
 pg = uigridlayout(pnl,[1,1]); pg.Padding=[8 8 8 8];
 
-pnlScroll = uigridlayout(pg,[22,1]);
-pnlScroll.RowHeight = {22,36,44,8, 22,36,36,36, 44,8, 22,36, 8, 22,44, 8,44,8, 36,44, 22,'1x'};
+pnlScroll = uigridlayout(pg,[23,1]);
+pnlScroll.RowHeight = {22,36,44,8, 22,36,36,36, 44,8, 22,36, 8, 22,44,44, 8,44,8, 36,44, 22,'1x'};
 pnlScroll.RowSpacing = 4;
 
 % DESTINO
@@ -92,6 +93,10 @@ mkLabel(pnlScroll,'▸ TEST MOTORES', 13, cPurple);
 btnTest = uibutton(pnlScroll,'push',...
   'Text','▶  VERIFICAR LOS 3 MOTORES',...
   'BackgroundColor',cPurple,'FontWeight','bold','FontColor','w');
+btnStop = uibutton(pnlScroll,'push',...
+  'Text','■  PARAR PRUEBA',...
+  'BackgroundColor',[0.6 0.1 0.1],'FontWeight','bold','FontColor','w',...
+  'Enable','off');
 uilabel(pnlScroll,'Text','');
 
 % CONEXIÓN
@@ -150,6 +155,7 @@ btnGo.ButtonPushedFcn      = @(~,~) moverRobot([]);
 btnPD.ButtonPushedFcn      = @(~,~) enviarControl();
 btnZero.ButtonPushedFcn    = @(~,~) ceroRobot();
 btnTest.ButtonPushedFcn    = @(~,~) testMotores();
+btnStop.ButtonPushedFcn    = @(~,~) pararPrueba();
 cbQ.ValueChangedFcn        = @(~,~) refrescarGrafica();
 cbE.ValueChangedFcn        = @(~,~) refrescarGrafica();
 cbPW.ValueChangedFcn       = @(~,~) refrescarGrafica();
@@ -253,7 +259,8 @@ log_('Sistema listo. Conecta el ESP32.');
 
     btnTest.Enable = 'off';
     btnTest.Text   = '⏳ Probando...';
-    st.testMode = true; setSt(st);
+    btnStop.Enable = 'on';
+    st.testMode = true; st.stopTest = false; setSt(st);
 
     % Deshabilitar callback — leerUnFrame leerá directo.
     % flush() limpia los ~11000 bytes acumulados en el buffer.
@@ -272,6 +279,7 @@ log_('Sistema listo. Conecta el ESP32.');
 
     for motor = 1:3
       if ~isvalid(fig); break; end
+      if getappdata(fig,'st').stopTest; break; end
       nombre = motorNames{motor};
       log_(sprintf('-- %s --', nombre));
 
@@ -315,10 +323,11 @@ log_('Sistema listo. Conecta el ESP32.');
     log_('══════════════════════════════');
 
     if ~isvalid(fig); return; end
-    st = getSt(); st.testMode = false; setSt(st);
+    st = getSt(); st.testMode = false; st.stopTest = false; setSt(st);
     try; configureCallback(st.port, "terminator", @(~,~) leerTelemetria()); catch; end
     btnTest.Enable = 'on';
     btnTest.Text   = '▶  VERIFICAR LOS 3 MOTORES';
+    btnStop.Enable = 'off';
   end
 
   % Lee UN frame D, del serial y actualiza appdata.
@@ -395,6 +404,7 @@ log_('Sistema listo. Conecta el ESP32.');
     ok  = false;
     while toc(t0) < timeout_s
       if ~isvalid(fig); return; end
+      if getappdata(fig,'st').stopTest; return; end
       leerUnFrame();
       pos = getappdata(fig,'st').current_q(motorIdx);
       if abs(pos - target_deg) < db
@@ -414,6 +424,7 @@ log_('Sistema listo. Conecta el ESP32.');
     t0 = tic;
     while toc(t0) < timeout_s
       if ~isvalid(fig); return; end
+      if getappdata(fig,'st').stopTest; return; end
       leerUnFrame();
       st = getappdata(fig,'st');
       if all(abs(st.current_q - targets) < db); return; end
@@ -426,6 +437,21 @@ log_('Sistema listo. Conecta el ESP32.');
     st = getappdata(fig,'st');
     if ~st.connected || isempty(st.port) || ~isvalid(st.port); return; end
     try; writeline(st.port, cmd); catch; end
+  end
+
+% ============================================================
+%  PARAR PRUEBA
+% ============================================================
+  function pararPrueba()
+    if ~isvalid(fig); return; end
+    st = getSt(); st.stopTest = true; setSt(st);
+    enviarCmd('DISARM');
+    log_('══════════════════════════════');
+    log_('  PRUEBA DETENIDA POR USUARIO');
+    log_('══════════════════════════════');
+    btnStop.Enable = 'off';
+    btnTest.Enable = 'on';
+    btnTest.Text   = '▶  VERIFICAR LOS 3 MOTORES';
   end
 
 % ============================================================
