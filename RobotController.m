@@ -53,8 +53,8 @@ pnl = uipanel(mainGrid,'BackgroundColor',cPanel,'BorderType','none');
 pnl.Layout.Row=[1 2]; pnl.Layout.Column=1;
 pg = uigridlayout(pnl,[1,1]); pg.Padding=[8 8 8 8];
 
-pnlScroll = uigridlayout(pg,[20,1]);
-pnlScroll.RowHeight = {22,36,44,8, 22,36,36,36, 44,8, 22,36, 8, 22,44, 8,44,8,22,120};
+pnlScroll = uigridlayout(pg,[22,1]);
+pnlScroll.RowHeight = {22,36,44,8, 22,36,36,36, 44,8, 22,36, 8, 22,44, 8,44,8, 36,44, 22,120};
 pnlScroll.RowSpacing = 4;
 
 % DESTINO
@@ -95,14 +95,19 @@ btnTest = uibutton(pnlScroll,'push',...
 uilabel(pnlScroll,'Text','');
 
 % CONEXIÓN
-gSerial = uigridlayout(pnlScroll,[1,3]); gSerial.Padding=[0 0 0 0]; gSerial.ColumnSpacing=4;
+gSerial = uigridlayout(pnlScroll,[1,2]); gSerial.Padding=[0 0 0 0]; gSerial.ColumnSpacing=4;
 ddPort     = uidropdown(gSerial,'Items',serialportlist("available"),...
                'BackgroundColor',cPanel2,'FontColor','w');
 btnConnect = uibutton(gSerial,'push','Text','CONECTAR',...
                'BackgroundColor',[0.2 0.5 0.8],'FontColor','w');
-btnZero    = uibutton(gSerial,'push','Text','ZERO',...
-               'BackgroundColor',[0.5 0.2 0.2],'FontColor','w');
-uilabel(pnlScroll,'Text','');
+
+% REGISTRAR CERO
+mkLabel(pnlScroll,'▸ POSICIÓN CERO', 13, cOk);
+btnZero = uibutton(pnlScroll,'push',...
+  'Text','[ ] REGISTRAR CERO  (coloca el robot en L invertida primero)',...
+  'BackgroundColor',[0.05 0.40 0.15],'FontWeight','bold','FontColor','w',...
+  'FontSize',11);
+
 mkLabel(pnlScroll,'▸ LOG', 11, [0.5 0.5 0.5]);
 txtLog = uitextarea(pnlScroll,'BackgroundColor',[0 0 0],...
   'FontColor',[0 0.9 0.3],'Editable',false,'FontSize',10);
@@ -182,6 +187,8 @@ log_('Sistema listo. Conecta el ESP32.');
         configureCallback(st.port, "terminator", @(~,~) leerTelemetria());
         btnConnect.Text = 'DESCONECTAR';
         btnConnect.BackgroundColor = cRed;
+        btnZero.BackgroundColor = [0.05 0.40 0.15];
+        btnZero.Text = '[ ] REGISTRAR CERO  (coloca el robot en L invertida primero)';
         writeline(st.port, 'DISARM');
         enviarPD(); enviarDeadband();
         % Crear header del CSV al conectar (modo write, limpia el anterior)
@@ -449,12 +456,20 @@ log_('Sistema listo. Conecta el ESP32.');
 
   function ceroRobot()
     st = getSt();
-    if ~st.connected; return; end
+    if ~st.connected
+      log_('[!] Conecta el ESP32 primero.');
+      return;
+    end
     writeline(st.port,'ZERO');
     st.target_q = [0 0 0];
     setSt(st);
-    dibujarRobot(ax3D, [0 0 0], p, motorColors, false);
-    log_('>> ZERO enviado.');
+    dibujarRobot(ax3D, [0 0 0], p, motorColors, true);
+    btnZero.BackgroundColor = [0.10 0.65 0.25];
+    btnZero.Text = '[✓] CERO REGISTRADO  —  listo para recibir comandos';
+    log_('══════════════════════════════');
+    log_('  Posición cero registrada.');
+    log_('  Robot en reposo. Esperando comando.');
+    log_('══════════════════════════════');
   end
 
 % ============================================================

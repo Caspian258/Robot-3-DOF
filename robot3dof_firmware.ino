@@ -78,15 +78,21 @@ void procesarSerial();
 //  SETUP
 // ---------------------------------------------------------------
 void setup() {
+  // Apagar motores ANTES que cualquier otra cosa para neutralizar
+  // el estado de los pines de strapping durante el boot (GPIO15 arranca HIGH)
+  pinMode(M1_IN1, OUTPUT); digitalWrite(M1_IN1, LOW);
+  pinMode(M1_IN2, OUTPUT); digitalWrite(M1_IN2, LOW);
+  pinMode(M1_ENA, OUTPUT); analogWrite(M1_ENA, 255);
+  pinMode(M2_IN1, OUTPUT); digitalWrite(M2_IN1, LOW);
+  pinMode(M2_IN2, OUTPUT); digitalWrite(M2_IN2, LOW);
+  pinMode(M2_ENA, OUTPUT); analogWrite(M2_ENA, 255);
+  pinMode(M3_IN1, OUTPUT); digitalWrite(M3_IN1, LOW);
+  pinMode(M3_IN2, OUTPUT); digitalWrite(M3_IN2, LOW);
+  pinMode(M3_ENA, OUTPUT); analogWrite(M3_ENA, 255);
+
   Serial.begin(115200);
 
-  // Pines de potencia — expandidos explícitamente
-  pinMode(M1_IN1, OUTPUT); pinMode(M1_IN2, OUTPUT); pinMode(M1_ENA, OUTPUT);
-  pinMode(M2_IN1, OUTPUT); pinMode(M2_IN2, OUTPUT); pinMode(M2_ENA, OUTPUT);
-  pinMode(M3_IN1, OUTPUT); pinMode(M3_IN2, OUTPUT); pinMode(M3_ENA, OUTPUT);
-  apagarMotor(M1_IN1, M1_IN2, M1_ENA);
-  apagarMotor(M2_IN1, M2_IN2, M2_ENA);
-  apagarMotor(M3_IN1, M3_IN2, M3_ENA);
+  for (int i = 0; i < 3; i++) last_t[i] = millis();
 
   // Encoders
   pinMode(M1_ENCA, INPUT_PULLUP); pinMode(M1_ENCB, INPUT_PULLUP);
@@ -254,8 +260,11 @@ void procesarSerial() {
       encCount[0] = encCount[1] = encCount[2] = 0;
       interrupts();
       target_q[0] = target_q[1] = target_q[2] = 0.0f;
-      holding[0]  = holding[1]  = holding[2]  = false;
-      armed = true;
+      holding[0]  = holding[1]  = holding[2]  = true;
+      armed = false;
+      apagarMotor(M1_IN1, M1_IN2, M1_ENA);
+      apagarMotor(M2_IN1, M2_IN2, M2_ENA);
+      apagarMotor(M3_IN1, M3_IN2, M3_ENA);
       Serial.println("ZEROED");
 
     } else if (data.equals("DISARM")) {
