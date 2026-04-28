@@ -252,8 +252,8 @@ log_('Sistema listo. Conecta el ESP32.');
     try; configureCallback(st.port, "off"); catch; end
     try; flush(st.port); catch; end
 
-    TEST_DEG = 60.0;
-    DEADBAND = 15.0;  % tolerancia real con overshoot
+    TEST_DEG = 15.0;
+    DEADBAND = 6.0;   % tolerancia real con overshoot
     TIMEOUT  = 20.0;  % motores lentos bajo carga
     resultados = zeros(1,3);
 
