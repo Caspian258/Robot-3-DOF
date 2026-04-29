@@ -623,9 +623,10 @@ log_('Sistema listo. Conecta el ESP32.');
 
     % Cinemática directa → actualizar campos X Y Z
     t1 = deg2rad(q_phys(1)); t2 = deg2rad(q_phys(2)); t3 = deg2rad(q_phys(3));
-    r  = p.L2*cos(t2) + p.L3*cos(t2+t3);
-    xc = r*cos(t1)*1000; yc = r*sin(t1)*1000;
-    zc = (p.L1 + p.L2*sin(t2) + p.L3*sin(t2+t3))*1000;
+    r  = p.L2*cos(t2) + p.L3*cos(t3+pi/2);
+    xc = r*cos(t1)*1000; 
+    yc = r*sin(t1)*1000;
+    zc = (p.L1 + p.L2*sin(t2) + p.L3*sin(t3+pi/2))*1000;
     efX.Value = round(xc,2); efY.Value = round(yc,2); efZ.Value = round(zc,2);
 
     cmd = sprintf('T,%.2f,%.2f,%.2f', q_fw(1), q_fw(2), q_fw(3));
@@ -824,11 +825,14 @@ end
 %  DIBUJO 3D
 % ============================================================
 function dibujarRobot(ax, q, p, motorColors, resetView)
+  p.L1 = p.L1 + 0.100;
   if ~resetView; cv=ax.View; end
   cla(ax); hold(ax,'on');
   O=[0;0;0]; P1=[0;0;p.L1];
   P2=P1+[cos(q(1))*cos(q(2))*p.L2; sin(q(1))*cos(q(2))*p.L2; sin(q(2))*p.L2];
-  P3=P2+[cos(q(1))*cos(q(2)+q(3))*p.L3; sin(q(1))*cos(q(2)+q(3))*p.L3; sin(q(2)+q(3))*p.L3];
+  P3 = P2 + [cos(q(1))*cos(q(3)+pi/2)*p.L3; 
+              sin(q(1))*cos(q(3)+pi/2)*p.L3; 
+              sin(q(3)+pi/2)*p.L3];
   pts=[O,P1,P2,P3];
   for k=1:3
     plot3(ax,pts(1,k:k+1),pts(2,k:k+1),pts(3,k:k+1),'-','LineWidth',5,'Color',motorColors{k});
@@ -879,4 +883,3 @@ function [efP,efD] = motorRow(parent,name,col,vP,vD)
   uilabel(g,'Text','Kd','FontColor','w','HorizontalAlignment','right');
   efD=mkEdit(g,vD);
 end
-
