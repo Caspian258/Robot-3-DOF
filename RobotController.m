@@ -1,3 +1,4 @@
+%% 
 % ============================================================
 %  RobotController.m – Robot RRR 3DOF | GUI
 % ============================================================
@@ -25,8 +26,9 @@ motorNames  = {'M1 (Base)', 'M2 (Hombro)', 'M3 (Codo)'};
 initState = struct(...
   'port',      [], ...
   'connected', false, ...
-  'target_q',  [0 45 -45], ...
+  'target_q',  [0 90 -90], ...
   'current_q', [0 0 0], ...
+  'home_q',    [0 90 -90], ...
   'pwm',       [0 0 0], ...
   'time',      [], ...
   'data_q',    zeros(3,0), ...
@@ -54,19 +56,19 @@ pnl = uipanel(mainGrid,'BackgroundColor',cPanel,'BorderType','none');
 pnl.Layout.Row=[1 2]; pnl.Layout.Column=1;
 pg = uigridlayout(pnl,[1,1]); pg.Padding=[8 8 8 8];
 
-pnlScroll = uigridlayout(pg,[24,1]);
-pnlScroll.RowHeight = {22,36,44,8, 22,36,36,36, 44,8, 22,36, 8, 22,44,44,36, 8,44,8, 36,44, 22,'1x'};
+pnlScroll = uigridlayout(pg,[29,1]);
+pnlScroll.RowHeight = {22,36,44,8, 22,36,36,36, 44,8, 22,36, 8, 22,44,44,36, 8,44,8, 44,36,44, 8,22,36,44, 22,'1x'};
 pnlScroll.RowSpacing = 4;
 
 % DESTINO
 mkLabel(pnlScroll,'▸ DESTINO (mm)', 14, cAccent);
 gXYZ = uigridlayout(pnlScroll,[1,6]); gXYZ.Padding=[0 0 0 0]; gXYZ.ColumnSpacing=4;
 uilabel(gXYZ,'Text','X','FontColor','w','HorizontalAlignment','right');
-efX = mkEdit(gXYZ, 200);
+efX = mkEdit(gXYZ, 165.69);
 uilabel(gXYZ,'Text','Y','FontColor','w','HorizontalAlignment','right');
 efY = mkEdit(gXYZ, 0);
 uilabel(gXYZ,'Text','Z','FontColor','w','HorizontalAlignment','right');
-efZ = mkEdit(gXYZ, 150);
+efZ = mkEdit(gXYZ, 305);
 btnGo = uibutton(pnlScroll,'push','Text','⟶  EJECUTAR TRAYECTORIA',...
   'BackgroundColor',cAccent,'FontWeight','bold','FontColor',[0 0 0]);
 uilabel(pnlScroll,'Text','');
@@ -113,12 +115,29 @@ ddPort     = uidropdown(gSerial,'Items',serialportlist("available"),...
 btnConnect = uibutton(gSerial,'push','Text','CONECTAR',...
                'BackgroundColor',[0.2 0.5 0.8],'FontColor','w');
 
-% REGISTRAR CERO
-mkLabel(pnlScroll,'▸ POSICIÓN CERO', 13, cOk);
+% CALIBRACIÓN / CERO
+btnFree = uibutton(pnlScroll,'push',...
+  'Text','⚡  SOLTAR CORRIENTE  (mover robot a mano)',...
+  'BackgroundColor',[0.70 0.35 0.00],'FontWeight','bold','FontColor','w',...
+  'FontSize',12);
+mkLabel(pnlScroll,'▸ POSICIÓN CERO  —  coloca el robot en L invertida, luego:', 12, cOk);
 btnZero = uibutton(pnlScroll,'push',...
-  'Text','[ ] REGISTRAR CERO  (coloca el robot en L invertida primero)',...
+  'Text','[ ] REGISTRAR CERO  (activa y mantiene L invertida)',...
   'BackgroundColor',[0.05 0.40 0.15],'FontWeight','bold','FontColor','w',...
   'FontSize',11);
+
+% CINEMÁTICA DIRECTA
+uilabel(pnlScroll,'Text','');
+mkLabel(pnlScroll,'▸ CINEMÁTICA DIRECTA (°)', 13, [0.85 0.65 0.20]);
+gFK = uigridlayout(pnlScroll,[1,6]); gFK.Padding=[0 0 0 0]; gFK.ColumnSpacing=4;
+uilabel(gFK,'Text','θ1','FontColor',[0.85 0.65 0.20],'HorizontalAlignment','right','FontSize',12);
+efFK1 = mkEdit(gFK, 0);
+uilabel(gFK,'Text','θ2','FontColor',[0.85 0.65 0.20],'HorizontalAlignment','right','FontSize',12);
+efFK2 = mkEdit(gFK, 0);
+uilabel(gFK,'Text','θ3','FontColor',[0.85 0.65 0.20],'HorizontalAlignment','right','FontSize',12);
+efFK3 = mkEdit(gFK, 0);
+btnFK = uibutton(pnlScroll,'push','Text','↗  ENVIAR ÁNGULOS',...
+  'BackgroundColor',[0.55 0.40 0.10],'FontWeight','bold','FontColor','w','FontSize',12);
 
 mkLabel(pnlScroll,'▸ LOG', 11, [0.5 0.5 0.5]);
 txtLog = uitextarea(pnlScroll,'BackgroundColor',[0 0 0],...
@@ -130,6 +149,13 @@ ax3D.Layout.Row=1; ax3D.Layout.Column=2;
 estilo3D(ax3D,'Modelo 3D  |  Arrastrar=Rotar   Shift+Click=Mover');
 disableDefaultInteractivity(ax3D);
 ax3D.ButtonDownFcn = @(src,~) iniciarInteraccion(src);
+
+% Display de ángulos actuales sobre el eje 3D
+lblAngulos = uilabel(mainGrid,...
+  'Text','θ1: ---°   θ2: ---°   θ3: ---°',...
+  'FontColor',[0.6 0.9 1.0],'FontSize',13,'FontWeight','bold',...
+  'BackgroundColor','none','HorizontalAlignment','left');
+lblAngulos.Layout.Row=1; lblAngulos.Layout.Column=2;
 
 % ── PANEL GRÁFICAS ──
 pnlGraf = uipanel(mainGrid,'BackgroundColor',cPanel,'BorderType','none');
@@ -160,7 +186,9 @@ uilabel(selGrid,'Text','');
 btnConnect.ButtonPushedFcn = @(~,~) conectar();
 btnGo.ButtonPushedFcn      = @(~,~) moverRobot([]);
 btnPD.ButtonPushedFcn      = @(~,~) enviarControl();
+btnFree.ButtonPushedFcn    = @(~,~) soltarCorrente();
 btnZero.ButtonPushedFcn    = @(~,~) ceroRobot();
+btnFK.ButtonPushedFcn      = @(~,~) enviarCinematicaDirecta();
 btnTest.ButtonPushedFcn    = @(~,~) testMotores();
 btnStop.ButtonPushedFcn    = @(~,~) pararPrueba();
 btnM1.ButtonPushedFcn      = @(~,~) testMotorUnico(1);
@@ -239,15 +267,19 @@ log_('Sistema listo. Conecta el ESP32.');
       efY.Value = xyz_mm(2);
       efZ.Value = xyz_mm(3);
     end
-    [q_des, err] = ikRobot(xyz_m, p);
-    if any(isnan(q_des)); log_(['[!] LÍMITE: ' err]); return; end
+    [q_des, ~] = ikRobot(xyz_m, p);
     st.target_q = rad2deg(q_des);
     setSt(st);
+    q_fw = st.target_q - st.home_q;
+    efFK1.Value = round(q_fw(1), 2);
+    efFK2.Value = round(q_fw(2), 2);
+    efFK3.Value = round(q_fw(3), 2);
     dibujarRobot(ax3D, q_des, p, motorColors, false);
     if st.connected
-      cmd = sprintf('T,%.2f,%.2f,%.2f', st.target_q(1), st.target_q(2), st.target_q(3));
+      fw = st.target_q - st.home_q;   % convertir ángulos físicos → firmware (relativo al cero)
+      cmd = sprintf('T,%.2f,%.2f,%.2f', fw(1), fw(2), fw(3));
       writeline(st.port, cmd);
-      log_(['>> ' cmd]);
+      log_(['>> ' cmd ' (física: ' sprintf('%.1f°,%.1f°,%.1f°', st.target_q) ')']);
     end
   end
 
@@ -277,7 +309,7 @@ log_('Sistema listo. Conecta el ESP32.');
     try; configureCallback(st.port, "off"); catch; end
     try; flush(st.port); catch; end
 
-    TEST_DEG = 15.0;
+    TEST_DEG = 50.0;
     DEADBAND = 6.0;   % tolerancia real con overshoot
     TIMEOUT  = 20.0;  % motores lentos bajo carga
     resultados = zeros(1,3);
@@ -347,7 +379,7 @@ log_('Sistema listo. Conecta el ESP32.');
     st = getSt();
     if ~st.connected; log_('[!] Conecta el ESP32 primero.'); return; end
 
-    TEST_DEG = 15.0;
+    TEST_DEG = 90.0;
     DEADBAND = 6.0;
     TIMEOUT  = 20.0;
     nombre = motorNames{motorIdx};
@@ -446,7 +478,9 @@ log_('Sistema listo. Conecta el ESP32.');
     end
     setappdata(fig,'st',st);
     if isvalid(fig)
-      dibujarRobot(ax3D, deg2rad(st.current_q), p, motorColors, false);
+      q_phys = st.current_q + st.home_q;
+      dibujarRobot(ax3D, deg2rad(q_phys), p, motorColors, false);
+      lblAngulos.Text = sprintf('θ1: %.1f°   θ2: %.1f°   θ3: %.1f°', st.current_q(1), st.current_q(2), st.current_q(3));
       refrescarGrafica();
       drawnow limitrate;
     end
@@ -534,22 +568,73 @@ log_('Sistema listo. Conecta el ESP32.');
       efDB1.Value, efDB2.Value, efDB3.Value));
   end
 
+  function soltarCorrente()
+    st = getSt();
+    if ~st.connected; log_('[!] Conecta el ESP32 primero.'); return; end
+    writeline(st.port,'FREE');
+    btnFree.BackgroundColor = [0.90 0.50 0.00];
+    btnZero.BackgroundColor = [0.05 0.40 0.15];
+    btnZero.Text = '[ ] REGISTRAR CERO  (activa y mantiene L invertida)';
+    log_('══════════════════════════════');
+    log_('⚡ CORRIENTE CORTADA — motores libres.');
+    log_('   Mueve el brazo a la posición L invertida,');
+    log_('   luego presiona REGISTRAR CERO.');
+    log_('══════════════════════════════');
+  end
+
   function ceroRobot()
     st = getSt();
     if ~st.connected
       log_('[!] Conecta el ESP32 primero.');
       return;
     end
+    % Resetear encoders en la posición actual (L invertida física = 0,0,0 lógico)
     writeline(st.port,'ZERO');
-    st.target_q = [0 0 0];
+    pause(0.15);
+    % Armar el controlador para que mantenga esta posición
+    writeline(st.port,'T,0,0,0');
+    % L invertida: θ1=0°, θ2=90°, θ3=−90°  →  X=165.69, Y=0, Z=305 mm
+    HOME_PHYS = [0, 90, -90];
+    st.home_q    = HOME_PHYS;
+    st.target_q  = HOME_PHYS;
+    efX.Value = 165.69;
+    efY.Value = 0;
+    efZ.Value = 305;
     setSt(st);
-    dibujarRobot(ax3D, [0 0 0], p, motorColors, true);
+    dibujarRobot(ax3D, deg2rad(HOME_PHYS), p, motorColors, true);
+    btnFree.BackgroundColor = [0.70 0.35 0.00];
     btnZero.BackgroundColor = [0.10 0.65 0.25];
-    btnZero.Text = '[✓] CERO REGISTRADO  —  listo para recibir comandos';
+    btnZero.Text = '[✓] CERO REGISTRADO  —  manteniendo L invertida';
     log_('══════════════════════════════');
-    log_('  Posición cero registrada.');
-    log_('  Robot en reposo. Esperando comando.');
+    log_('  Cero registrado. Controlador activo.');
+    log_('  Robot manteniendo posición L invertida.');
     log_('══════════════════════════════');
+  end
+
+% ============================================================
+%  CINEMÁTICA DIRECTA — enviar ángulos de articulación directamente
+% ============================================================
+  function enviarCinematicaDirecta()
+    % Los campos θ1/θ2/θ3 son DELTA desde la posición cero (0=L invertida)
+    st = getSt();
+    if ~st.connected; log_('[!] Conecta el ESP32 primero.'); return; end
+    q_fw   = [efFK1.Value, efFK2.Value, efFK3.Value];   % relativo al cero → va directo al firmware
+    q_phys = q_fw + st.home_q;                          % ángulos físicos absolutos → para dibujo y FK
+
+    % Cinemática directa → actualizar campos X Y Z
+    t1 = deg2rad(q_phys(1)); t2 = deg2rad(q_phys(2)); t3 = deg2rad(q_phys(3));
+    r  = p.L2*cos(t2) + p.L3*cos(t2+t3);
+    xc = r*cos(t1)*1000; yc = r*sin(t1)*1000;
+    zc = (p.L1 + p.L2*sin(t2) + p.L3*sin(t2+t3))*1000;
+    efX.Value = round(xc,2); efY.Value = round(yc,2); efZ.Value = round(zc,2);
+
+    cmd = sprintf('T,%.2f,%.2f,%.2f', q_fw(1), q_fw(2), q_fw(3));
+    writeline(st.port, cmd);
+    st.target_q = q_phys;
+    setSt(st);
+    dibujarRobot(ax3D, deg2rad(q_phys), p, motorColors, false);
+    log_(sprintf('>> FK Δθ1=%.1f° Δθ2=%.1f° Δθ3=%.1f°  →  X=%.1f Y=%.1f Z=%.1f mm', ...
+      q_fw(1), q_fw(2), q_fw(3), xc, yc, zc));
   end
 
 % ============================================================
@@ -650,7 +735,9 @@ log_('Sistema listo. Conecta el ESP32.');
     if (t_now - last_draw_t) > 0.04
       last_draw_t = t_now;
       if isvalid(fig)
-        dibujarRobot(ax3D, deg2rad(st.current_q), p, motorColors, false);
+        q_phys = st.current_q + st.home_q;
+        dibujarRobot(ax3D, deg2rad(q_phys), p, motorColors, false);
+        lblAngulos.Text = sprintf('θ1: %.1f°   θ2: %.1f°   θ3: %.1f°', st.current_q(1), st.current_q(2), st.current_q(3));
         refrescarGrafica();
         drawnow;
       end
@@ -724,13 +811,9 @@ end % robotGUI
 %  CINEMÁTICA INVERSA
 % ============================================================
 function [q, errMsg] = ikRobot(pos, p)
-  q=[NaN NaN NaN]; errMsg='';
+  errMsg='';
   x=pos(1); y=pos(2); z=pos(3);
-  if z<0; errMsg='Z < 0.'; return; end
   q1=atan2(y,x); r=sqrt(x^2+y^2); z_rel=z-p.L1;
-  D3d=sqrt(r^2+z_rel^2);
-  if D3d>(p.L2+p.L3); errMsg='Fuera de alcance.'; return; end
-  if D3d<0.05;         errMsg='Singularidad.'; return; end
   D=max(-1,min(1,(r^2+z_rel^2-p.L2^2-p.L3^2)/(2*p.L2*p.L3)));
   q3=atan2(-sqrt(1-D^2),D);
   q2=atan2(z_rel,r)-atan2(p.L3*sin(q3),p.L2+p.L3*cos(q3));

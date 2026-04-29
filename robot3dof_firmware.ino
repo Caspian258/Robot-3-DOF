@@ -6,10 +6,11 @@
 //  y no vuelve a escribir pines hasta recibir nuevo target.
 // =============================================================
 
-// --- PINES DE POTENCIA (verificados físicamente) ---
-const int M1_IN1 = 15; const int M1_IN2 = 2;  const int M1_ENA = 25;
-const int M2_IN1 = 21; const int M2_IN2 = 22; const int M2_ENA = 23;
-const int M3_IN1 = 26; const int M3_IN2 = 27; const int M3_ENA = 17;
+// --- PINES DE POTENCIA ---
+// Bloques consecutivos sin conflicto con encoders ni pines input-only
+const int M1_IN1 = 21; const int M1_IN2 = 22; const int M1_ENA = 23;
+const int M2_IN1 = 25; const int M2_IN2 = 26; const int M2_ENA = 27;
+const int M3_IN1 = 13; const int M3_IN2 = 14; const int M3_ENA = 16;
 
 // --- PINES DE ENCODERS (verificados físicamente) ---
 const int M1_ENCA = 18; const int M1_ENCB = 19;
@@ -127,7 +128,7 @@ void loop() {
   if (armed) {
     controlMotor(0, M1_IN1, M1_IN2, M1_ENA);
     controlMotor(1, M2_IN1, M2_IN2, M2_ENA);
-    controlMotor(2, M3_IN2, M3_IN1, M3_ENA);  // M3 invertido físicamente: IN1↔IN2
+    controlMotor(2, M3_IN1, M3_IN2, M3_ENA);
   }
 
   // Telemetría: D,q1,q2,q3,e1,e2,e3,pwm1,pwm2,pwm3
@@ -161,17 +162,19 @@ void controlMotor(int idx, int in1, int in2, int ena) {
   float error = target_q[idx] - current_q[idx];
 
   if (holding[idx]) {
-    // Ya estabilizado. Si algo mueve el brazo más allá del doble
-    // de la zona muerta, reactivar el control.
-    if (fabsf(error) > deadband[idx] * 2.0f) {
+    // Reactivar solo si el error supera 1.5× deadband (más sensible que 2×
+    // para reducir el salto de corriente al reengancharse)
+    if (fabsf(error) > deadband[idx] * 1.5f) {
       holding[idx] = false;
+      prev_error[idx] = error;   // evitar spike derivativo al reactivar
+      last_t[idx]     = millis();
     } else {
       pwm_out[idx] = 0;
-      return;  // No tocar los pines — silencio total
+      return;
     }
   }
 
-  // Dentro de zona muerta → apagar UNA vez y marcar holding
+  // Dentro de zona muerta → freno y marcar holding
   if (fabsf(error) < deadband[idx]) {
     apagarMotor(in1, in2, ena);
     pwm_out[idx]    = 0;
@@ -185,11 +188,14 @@ void controlMotor(int idx, int in1, int in2, int ena) {
   unsigned long now = millis();
   float dt = (now - last_t[idx]) / 1000.0f;
   if (dt <= 0.0f) dt = 0.01f;
+  if (dt > 0.1f)  dt = 0.1f;   // clamp: evita spike si el loop se pausa
 
   float derivative = (error - prev_error[idx]) / dt;
   int power = (int)(fabsf(error * Kp[idx] + derivative * Kd[idx]));
   if (power > 255) power = 255;
-  if (power < 30)  power = 30;   // mínimo para vencer fricción estática
+  // PWM mínimo proporcional al error para arranque suave cerca de la zona muerta
+  int min_pwm = (fabsf(error) < deadband[idx] * 3.0f) ? 20 : 35;
+  if (power < min_pwm) power = min_pwm;
 
   pwm_out[idx]    = power;
   prev_error[idx] = error;
@@ -273,6 +279,14 @@ void procesarSerial() {
       apagarMotor(M2_IN1, M2_IN2, M2_ENA);
       apagarMotor(M3_IN1, M3_IN2, M3_ENA);
       Serial.println("DISARMED");
+
+    } else if (data.equals("FREE")) {
+      // Costa: ENA=0 — driver deshabilitado, motor gira libre (sin freno)
+      armed = false;
+      digitalWrite(M1_IN1, LOW); digitalWrite(M1_IN2, LOW); analogWrite(M1_ENA, 0);
+      digitalWrite(M2_IN1, LOW); digitalWrite(M2_IN2, LOW); analogWrite(M2_ENA, 0);
+      digitalWrite(M3_IN1, LOW); digitalWrite(M3_IN2, LOW); analogWrite(M3_ENA, 0);
+      Serial.println("FREE");
     }
   }
 }

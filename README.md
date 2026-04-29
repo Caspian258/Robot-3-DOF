@@ -20,9 +20,9 @@ Sistema de control para un brazo robótico RRR de 3 grados de libertad, basado e
 
 | Motor | ENC_A | ENC_B | IN1 | IN2 | ENA |
 |---|---|---|---|---|---|
-| M1 (Base) | 18 | 19 | 25 | 26 | 27 |
-| M2 (Hombro) | 32 | 33 | 21 | 22 | 23 |
-| M3 (Codo) | 34 | 35 | 13 | 14 | 16 |
+| M1 (Base) | 18 | 19 | 21 | 22 | 23 |
+| M2 (Hombro) | 32 | 33 | 25 | 26 | 27 |
+| M3 (Codo) | 4 | 5 | 13 | 14 | 16 |
 
 ## Protocolo Serial (115200 baud)
 
