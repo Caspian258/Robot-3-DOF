@@ -1,0 +1,16 @@
+[1.166s] Invoking command in '/home/bassdrumm/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/build/motor_controller': PYTHONPATH=/home/bassdrumm/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/build/motor_controller/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/bassdrumm/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/install/motor_controller/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/bassdrumm/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/build/motor_controller/build --no-deps
+[1.710s] running develop
+[2.019s] running egg_info
+[2.019s] writing motor_controller.egg-info/PKG-INFO
+[2.019s] writing dependency_links to motor_controller.egg-info/dependency_links.txt
+[2.019s] writing entry points to motor_controller.egg-info/entry_points.txt
+[2.020s] writing requirements to motor_controller.egg-info/requires.txt
+[2.020s] writing top-level names to motor_controller.egg-info/top_level.txt
+[2.022s] reading manifest file 'motor_controller.egg-info/SOURCES.txt'
+[2.024s] writing manifest file 'motor_controller.egg-info/SOURCES.txt'
+[2.026s] running build_ext
+[2.027s] Creating /home/bassdrumm/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/install/motor_controller/lib/python3.10/site-packages/motor-controller.egg-link (link to .)
+[2.029s] Installing pd_gui script to /home/bassdrumm/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/install/motor_controller/lib/motor_controller
+[2.030s] 
+[2.030s] Installed /home/bassdrumm/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/build/motor_controller
+[2.078s] Invoked command in '/home/bassdrumm/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/build/motor_controller' returned '0': PYTHONPATH=/home/bassdrumm/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/build/motor_controller/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/bassdrumm/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/install/motor_controller/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/bassdrumm/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/build/motor_controller/build --no-deps

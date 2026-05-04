@@ -1,0 +1,31 @@
+Terminal 1: micro-ROS Agent (The Bridge)
+(Make sure your PlatformIO Serial Monitor is CLOSED before running this!)
+Bash
+
+newgrp docker
+docker run -it --rm --net=host --privileged -v /dev:/dev microros/micro-ros-agent:humble serial --dev /dev/ttyUSB0 -b 115200
+
+    Action: Once you see running..., press the EN/RST button on your ESP32 board. Wait to see a message like "session established".
+
+Terminal 2: Live Position Feed (The Monitor)
+Run this to see the raw numbers directly from Motor 1.
+Bash
+
+source ~/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/install/setup.bash
+ros2 topic echo /motor1/position
+
+(Note: If you want to check the other motors, just change motor1 to motor2 or motor3 in the command).
+
+Terminal 3: Build & Source (The Workspace)
+(Only necessary if you edited your Python code)
+Bash
+
+cd ~/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws
+colcon build --symlink-install
+source install/setup.bash
+
+Terminal 4: Launch Unified GUI (The Control Center)
+Bash
+
+source ~/Documents/PlatformIO/Projects/motor_pd_controller/ros2_ws/install/setup.bash
+ros2 run motor_controller pd_gui
