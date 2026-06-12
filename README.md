@@ -2,6 +2,24 @@
 
 Sistema de control para un brazo robótico RRR de 3 grados de libertad, basado en ESP32 con control PD e interfaz gráfica en MATLAB.
 
+## Inicio rápido
+
+> **Requisito previo:** tener [Python 3.8+](https://www.python.org/downloads/) instalado.
+
+**Linux / macOS**
+```bash
+bash setup.sh
+```
+
+**Windows**
+```
+setup.bat
+```
+
+El script instala PlatformIO y pyserial, y pre-descarga la plataforma ESP32 (~200 MB). Después solo necesitas conectar el ESP32 y ejecutar `pio run --target upload`.
+
+---
+
 ## Requisitos
 
 | Componente | Versión mínima | Notas |
