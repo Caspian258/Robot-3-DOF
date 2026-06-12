@@ -1,67 +1,137 @@
 # Robot 3-DOF
 
-Sistema de control para un brazo robótico RRR de 3 grados de libertad, basado en ESP32 con control PD y interfaz gráfica en MATLAB.
+Sistema de control para un brazo robótico RRR de 3 grados de libertad, basado en ESP32 con control PD e interfaz gráfica en MATLAB.
 
-## Componentes
+## Requisitos
+
+| Componente | Versión mínima | Notas |
+|---|---|---|
+| MATLAB | R2021a | `serialportlist()` requiere R2021a o superior |
+| Python | 3.8+ | Solo para el bridge serial en Linux |
+| PlatformIO CLI | cualquiera | Recomendado para flashear el firmware |
+| Arduino IDE | 2.x | Alternativa a PlatformIO |
+
+---
+
+## Archivos del proyecto
 
 | Archivo | Descripción |
 |---|---|
 | `robot3dof_firmware.ino` | Firmware para ESP32 — control PD de 3 motores DC con encoders |
 | `RobotController.m` | GUI de MATLAB — visualización 3D, cinemática inversa, telemetría en tiempo real |
 | `robot_serial_bridge.py` | Bridge serial en Python — evita conflictos de lock files en Linux |
+| `requirements.txt` | Dependencias Python para el bridge |
+
+---
 
 ## Hardware
 
-- **Microcontrolador:** ESP32
-- **Motores:** 3× DC con encoder (994 counts/rev)
-- **Driver:** puente H por motor
+- **Microcontrolador:** ESP32 DevKit
+- **Motores:** 3× JGA25-370 DC con encoder magnético (6 cables)
+- **Driver:** L298N (puente H por motor)
 
 ### Pines ESP32
 
 | Motor | ENC_A | ENC_B | IN1 | IN2 | ENA |
 |---|---|---|---|---|---|
-| M1 (Base) | 18 | 19 | 21 | 22 | 23 |
-| M2 (Hombro) | 32 | 33 | 25 | 26 | 27 |
-| M3 (Codo) | 4 | 5 | 13 | 14 | 16 |
+| M1 (Base / yaw) | 18 | 19 | 21 | 22 | 23 |
+| M2 (Hombro / pitch) | 32 | 33 | 25 | 26 | 27 |
+| M3 (Codo / pitch) | 4 | 5 | 13 | 14 | 16 |
 
-## Protocolo Serial (115200 baud)
+### Parámetros del robot
 
-| Comando | Descripción |
+| Eslabón | Longitud |
 |---|---|
-| `SP:deg1,deg2,deg3` | Setpoint en grados para los 3 motores |
-| `KP:valor` | Actualizar ganancia proporcional global |
-| `KD:valor` | Actualizar ganancia derivativa global |
-| `RST` | Resetear encoders y setpoints a cero |
-| `STOP` | Congelar posición actual |
+| L1 (columna/base) | 100 mm |
+| L2 (hombro) | 205 mm |
+| L3 (codo/antebrazo) | 165.69 mm |
 
-**Respuesta del ESP32:** `POS:deg1,deg2,deg3,sp1,sp2,sp3`
+---
 
-## Parámetros del robot
+## Setup — Firmware ESP32
 
-- **L1** (base): 100 mm  
-- **L2** (hombro): 205 mm  
-- **L3** (codo): 165.69 mm  
+### Opción A: PlatformIO (recomendado)
 
-## Uso
+El repositorio ya incluye `platformio.ini` configurado para la placa `esp32dev`.
 
-### Firmware
+1. Instalar Python 3.8+ si no lo tienes.
+2. Instalar PlatformIO CLI:
+   ```bash
+   pip install platformio
+   ```
+3. Compilar y flashear:
+   ```bash
+   pio run --target upload
+   ```
+   PlatformIO descarga automáticamente el toolchain de Espressif la primera vez.
 
-1. Abrir `robot3dof_firmware.ino` en Arduino IDE con soporte para ESP32.
-2. Verificar los pines según la tabla anterior.
-3. Compilar y subir al ESP32.
+4. Monitor serial (opcional):
+   ```bash
+   pio device monitor --baud 115200
+   ```
 
-### GUI MATLAB
+### Opción B: Arduino IDE 2.x
+
+1. Descargar e instalar [Arduino IDE 2.x](https://www.arduino.cc/en/software).
+2. Abrir **File → Preferences** y agregar esta URL en "Additional boards manager URLs":
+   ```
+   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+   ```
+3. Ir a **Tools → Board → Boards Manager**, buscar `esp32` e instalar el paquete de Espressif.
+4. Seleccionar **Tools → Board → ESP32 Arduino → ESP32 Dev Module**.
+5. Abrir `robot3dof_firmware.ino`, compilar y subir.
+
+> El firmware no requiere librerías externas — solo el core Arduino para ESP32.
+
+---
+
+## Setup — GUI MATLAB
+
+**Requisito:** MATLAB R2021a o superior (sin toolboxes adicionales).
 
 1. Conectar el ESP32 por USB.
-2. Ejecutar `RobotController.m` en MATLAB.
-3. Seleccionar el puerto COM/tty en el desplegable y presionar **CONECTAR**.
-4. Introducir coordenadas X, Y, Z en mm y presionar **EJECUTAR TRAYECTORIA**.
+2. Abrir MATLAB y ejecutar:
+   ```matlab
+   RobotController
+   ```
+3. Seleccionar el puerto serial en el desplegable (ej. `COM3` en Windows, `/dev/ttyUSB0` en Linux).
+4. Presionar **CONECTAR**.
+5. Introducir coordenadas X, Y, Z en mm y presionar **EJECUTAR TRAYECTORIA**.
 
-### Bridge Python (Linux)
+---
+
+## Setup — Bridge Python (solo Linux, opcional)
+
+Útil cuando MATLAB no puede adquirir el lock del puerto serial en Linux.
 
 ```bash
-pip install pyserial
+pip install -r requirements.txt
 python robot_serial_bridge.py
 ```
 
-Útil cuando MATLAB no puede adquirir el lock del puerto serial en Linux.
+---
+
+## Protocolo Serial (115200 baud)
+
+### MATLAB → ESP32
+
+| Comando | Descripción |
+|---|---|
+| `T,deg1,deg2,deg3` | Nuevo setpoint en grados para los 3 motores |
+| `K1,Kp,Kd` | Ganancias PD del motor 1 |
+| `K2,Kp,Kd` | Ganancias PD del motor 2 |
+| `K3,Kp,Kd` | Ganancias PD del motor 3 |
+| `DB,d1,d2,d3` | Zona muerta por motor (grados) |
+| `ZERO` | Resetear encoders y setpoints a cero |
+| `DISARM` | Desactivar control, motores en freno |
+| `FREE` | Soltar corriente (motores libres) |
+
+### ESP32 → MATLAB
+
+| Respuesta | Descripción |
+|---|---|
+| `D,q1,q2,q3,e1,e2,e3,pwm1,pwm2,pwm3` | Telemetría: posición actual, error y PWM de los 3 motores |
+| `READY` | ESP32 listo tras el boot |
+| `ZEROED` | Confirmación de reset de encoders |
+| `DISARMED` | Confirmación de desactivación |
+| `FREE` | Confirmación de motores libres |
