@@ -111,8 +111,10 @@ btnM3 = uibutton(gMotInd,'push','Text','▶ M3', 'BackgroundColor',motorColors{3
 uilabel(pnlScroll,'Text',''); % Spacer
 
 % [23-24] CONEXIÓN
-gSerial = uigridlayout(pnlScroll,[1,2]); gSerial.Padding=[0 0 0 0]; gSerial.ColumnSpacing=4;
+gSerial = uigridlayout(pnlScroll,[1,3]); gSerial.Padding=[0 0 0 0]; gSerial.ColumnSpacing=4;
+gSerial.ColumnWidth = {'1x',36,80};
 ddPort     = uidropdown(gSerial,'Items',serialportlist("available"),'BackgroundColor',cPanel2,'FontColor','w');
+btnRefresh = uibutton(gSerial,'push','Text','⟳','BackgroundColor',[0.18 0.22 0.30],'FontColor','w','Tooltip','Actualizar lista de puertos');
 btnConnect = uibutton(gSerial,'push','Text','CONECTAR','BackgroundColor',[0.2 0.5 0.8],'FontColor','w');
 uilabel(pnlScroll,'Text',''); % Spacer
 
@@ -177,6 +179,7 @@ uilabel(selGrid,'Text','');
 
 % ── CALLBACKS ──
 btnConnect.ButtonPushedFcn = @(~,~) conectar();
+btnRefresh.ButtonPushedFcn = @(~,~) refrescarPuertos();
 btnGo.ButtonPushedFcn      = @(~,~) moverRobot([]);
 btnSave1.ButtonPushedFcn   = @(~,~) savePos1();
 btnSave2.ButtonPushedFcn   = @(~,~) savePos2();
@@ -214,6 +217,18 @@ log_('Sistema listo. Conecta el ESP32.');
 % ============================================================
 %  CONEXIÓN
 % ============================================================
+  function refrescarPuertos()
+    puertos = serialportlist("available");
+    if isempty(puertos)
+      ddPort.Items = {''};
+      log_('[!] No se detectaron puertos seriales. Verifica que el ESP32 esté conectado.');
+    else
+      ddPort.Items = puertos;
+      ddPort.Value = puertos{1};
+      log_(sprintf('>> Puertos detectados: %s', strjoin(puertos, ', ')));
+    end
+  end
+
   function conectar()
     st = getSt();
     try
@@ -368,19 +383,22 @@ log_('Sistema listo. Conecta el ESP32.');
       efY.Value = xyz_mm(2);
       efZ.Value = xyz_mm(3);
     end
-    [q_des, ~] = ikRobot(xyz_m, p);
+    [q_des, ikErr] = ikRobot(xyz_m, p);
+    if ~isempty(ikErr)
+      log_(['[!] IK: ' ikErr ' — enviando posición aproximada']);
+    end
     st.target_q = rad2deg(q_des);
     setSt(st);
-    
+
     q_fw = st.target_q - st.home_q;
     efFK1.Value = round(q_fw(1), 2);
     efFK2.Value = round(q_fw(2), 2);
     efFK3.Value = round(q_fw(3), 2);
-    
+
     dibujarRobot(ax3D, q_des, p, motorColors, false);
-    
+
     if st.connected
-      fw = st.target_q - st.home_q;
+      fw  = st.target_q - st.home_q;
       cmd = sprintf('T,%.2f,%.2f,%.2f', fw(1), fw(2), fw(3));
       writeline(st.port, cmd);
       log_(['>> ' cmd ' (física: ' sprintf('%.1f°,%.1f°,%.1f°', st.target_q) ')']);
@@ -902,20 +920,26 @@ end % robotGUI
 %  CINEMÁTICA INVERSA (Paralelogramo)
 % ============================================================
 function [q, errMsg] = ikRobot(pos, p)
-  errMsg='';
-  x=pos(1); y=pos(2); z=pos(3);
-  
-  q1=atan2(y,x); 
-  r=sqrt(x^2+y^2); 
-  z_rel=z-p.L1;
-  
-  D=max(-1,min(1,(r^2+z_rel^2-p.L2^2-p.L3^2)/(2*p.L2*p.L3)));
-  q3_rel=atan2(-sqrt(1-D^2),D);
-  q2=atan2(z_rel,r)-atan2(p.L3*sin(q3_rel),p.L2+p.L3*cos(q3_rel));
-  
+  errMsg = '';
+  x = pos(1); y = pos(2); z = pos(3);
+
+  q1    = atan2(y, x);
+  r     = sqrt(x^2 + y^2);
+  z_rel = z - p.L1;
+
+  D_raw = (r^2 + z_rel^2 - p.L2^2 - p.L3^2) / (2 * p.L2 * p.L3);
+  if D_raw < -1 || D_raw > 1
+    dist = sqrt(r^2 + z_rel^2) * 1000;
+    lim  = (p.L2 + p.L3) * 1000;
+    errMsg = sprintf('Target fuera de workspace: alcance %.0f mm, límite %.0f mm', dist, lim);
+  end
+  D = max(-1, min(1, D_raw));
+
+  q3_rel   = atan2(-sqrt(1 - D^2), D);
+  q2       = atan2(z_rel, r) - atan2(p.L3*sin(q3_rel), p.L2 + p.L3*cos(q3_rel));
   q3_motor = q2 + q3_rel - pi/2;
-  
-  q=[q1, q2, q3_motor];
+
+  q = [q1, q2, q3_motor];
 end
 
 % ============================================================
