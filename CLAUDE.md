@@ -18,10 +18,10 @@ ejecuta control PD local y se comunica por USB-Serial con una GUI en MATLAB.
 
 | Capa | Tecnología | Notas |
 |---|---|---|
-| Firmware | PlatformIO + Arduino framework | `robot3dof_firmware.ino` |
+| Firmware | PlatformIO + Arduino framework | `firmware/robot3dof_firmware.ino` |
 | Microcontrolador | ESP32 DevKit | USB-Serial 115200 baud |
-| GUI / IK | MATLAB `RobotController.m` | uifigure, uiaxes 3D |
-| Bridge serial (Linux) | `robot_serial_bridge.py` | evita lock-file de MATLAB en `/run/lock` |
+| GUI / IK | MATLAB `matlab/RobotController.m` | uifigure, uiaxes 3D |
+| Bridge serial (Linux) | `tools/robot_serial_bridge.py` | evita lock-file de MATLAB en `/run/lock` |
 
 ---
 
@@ -111,10 +111,10 @@ D        = (r² + z_rel² − L2² − L3²) / (2·L2·L3)   — clampear a [−
 θ3_motor = θ2 + θ3_rel − π/2                         — ángulo absoluto del motor M3
 ```
 
-Implementada en `ikRobot()` (RobotController.m L904).
+Implementada en `ikRobot()` (matlab/RobotController.m L904).
 FK inversa: `r = L2·cos(θ2) + L3·cos(θ3_motor + π/2)`, `z = L1 + L2·sin(θ2) + L3·sin(θ3_motor + π/2)`
 
-> ⚠️ `ikRobot()` no verifica si el target está fuera del workspace — clampea D silenciosamente.
+> `ikRobot()` valida si D_raw ∈ [-1,1] y muestra advertencia en el log si el target está fuera del workspace.
 
 ---
 
@@ -122,17 +122,22 @@ FK inversa: `r = L2·cos(θ2) + L3·cos(θ3_motor + π/2)`, `z = L1 + L2·sin(θ
 
 ```
 3DOF/
-├── CLAUDE.md                  ← este archivo (contexto para IA)
-├── BITACORA.md                ← registro de avances por sesión
-├── README.md                  ← documentación pública
-├── .gitignore                 ← excluye .pio/, .vscode/, robot_log.csv
-├── robot3dof_firmware.ino     ← firmware ESP32 (PlatformIO / Arduino IDE)
-├── platformio.ini
-├── RobotController.m          ← GUI MATLAB principal
-├── robot_serial_bridge.py     ← bridge serial para Linux (workaround lock file)
-├── requirements.txt           ← pyserial>=3.5
-├── setup.sh / setup.bat       ← scripts de instalación
-└── CAD/                       ← archivos SolidWorks (SLDPRT, SLDASM)
+├── CLAUDE.md                        ← este archivo (contexto para IA)
+├── BITACORA.md                      ← registro de avances por sesión
+├── README.md                        ← documentación pública
+├── .gitignore                       ← excluye firmware/.pio/, .vscode/, robot_log.csv
+├── requirements.txt                 ← pyserial>=3.5
+├── firmware/
+│   ├── robot3dof_firmware.ino       ← firmware ESP32 (PlatformIO / Arduino IDE)
+│   └── platformio.ini               ← src_dir=. apunta al mismo directorio
+├── matlab/
+│   └── RobotController.m            ← GUI MATLAB principal
+├── tools/
+│   ├── robot_serial_bridge.py       ← bridge serial para Linux (workaround lock file)
+│   ├── setup.sh                     ← instalación Linux/macOS
+│   └── setup.bat                    ← instalación Windows
+├── docs/                            ← documentación adicional (vacía por ahora)
+└── CAD/                             ← archivos SolidWorks (SLDPRT, SLDASM)
 ```
 
 ---
@@ -150,8 +155,8 @@ FK inversa: `r = L2·cos(θ2) + L3·cos(θ3_motor + π/2)`, `z = L1 + L2·sin(θ
    - Próximos pasos
 5. Los pines del firmware **siempre** deben coincidir con la tabla de
    "Pines verificados" de este archivo.
-6. El firmware (`robot3dof_firmware.ino`) **no se toca** salvo corrección
-   explícita de pines o bugs confirmados. No existe `firmware/src/main.cpp`.
+6. El firmware (`firmware/robot3dof_firmware.ino`) **no se toca** salvo corrección
+   explícita de pines o bugs confirmados. Compilar siempre desde `firmware/` (`cd firmware && pio run`).
 7. Commits descriptivos en **español**.
 8. Un paso a la vez — mostrar resultado antes de continuar con el siguiente.
 

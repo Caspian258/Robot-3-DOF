@@ -8,15 +8,15 @@ Sistema de control para un brazo robótico RRR de 3 grados de libertad, basado e
 
 **Linux / macOS**
 ```bash
-bash setup.sh
+bash tools/setup.sh
 ```
 
 **Windows**
 ```
-setup.bat
+tools\setup.bat
 ```
 
-El script instala PlatformIO y pyserial, y pre-descarga la plataforma ESP32 (~200 MB). Después solo necesitas conectar el ESP32 y ejecutar `pio run --target upload`.
+El script instala PlatformIO y pyserial, y pre-descarga la plataforma ESP32 (~200 MB). Después solo necesitas conectar el ESP32 y ejecutar `cd firmware && pio run --target upload`.
 
 ---
 
@@ -35,9 +35,11 @@ El script instala PlatformIO y pyserial, y pre-descarga la plataforma ESP32 (~20
 
 | Archivo | Descripción |
 |---|---|
-| `robot3dof_firmware.ino` | Firmware para ESP32 — control PD de 3 motores DC con encoders |
-| `RobotController.m` | GUI de MATLAB — visualización 3D, cinemática inversa, telemetría en tiempo real |
-| `robot_serial_bridge.py` | Bridge serial en Python — evita conflictos de lock files en Linux |
+| `firmware/robot3dof_firmware.ino` | Firmware para ESP32 — control PD de 3 motores DC con encoders |
+| `firmware/platformio.ini` | Configuración de PlatformIO para ESP32 |
+| `matlab/RobotController.m` | GUI de MATLAB — visualización 3D, cinemática inversa, telemetría en tiempo real |
+| `tools/robot_serial_bridge.py` | Bridge serial en Python — evita conflictos de lock files en Linux |
+| `tools/setup.sh` / `tools/setup.bat` | Scripts de instalación automática (Linux/macOS y Windows) |
 | `requirements.txt` | Dependencias Python para el bridge |
 
 ---
@@ -70,7 +72,7 @@ El script instala PlatformIO y pyserial, y pre-descarga la plataforma ESP32 (~20
 
 ### Opción A: PlatformIO (recomendado)
 
-El repositorio ya incluye `platformio.ini` configurado para la placa `esp32dev`.
+El repositorio ya incluye `firmware/platformio.ini` configurado para la placa `esp32dev`.
 
 1. Instalar Python 3.8+ si no lo tienes.
 2. Instalar PlatformIO CLI:
@@ -79,6 +81,7 @@ El repositorio ya incluye `platformio.ini` configurado para la placa `esp32dev`.
    ```
 3. Compilar y flashear:
    ```bash
+   cd firmware
    pio run --target upload
    ```
    PlatformIO descarga automáticamente el toolchain de Espressif la primera vez.
@@ -97,7 +100,7 @@ El repositorio ya incluye `platformio.ini` configurado para la placa `esp32dev`.
    ```
 3. Ir a **Tools → Board → Boards Manager**, buscar `esp32` e instalar el paquete de Espressif.
 4. Seleccionar **Tools → Board → ESP32 Arduino → ESP32 Dev Module**.
-5. Abrir `robot3dof_firmware.ino`, compilar y subir.
+5. Abrir `firmware/robot3dof_firmware.ino`, compilar y subir.
 
 > El firmware no requiere librerías externas — solo el core Arduino para ESP32.
 
@@ -108,7 +111,7 @@ El repositorio ya incluye `platformio.ini` configurado para la placa `esp32dev`.
 **Requisito:** MATLAB R2021a o superior (sin toolboxes adicionales).
 
 1. Conectar el ESP32 por USB.
-2. Abrir MATLAB y ejecutar:
+2. Abrir MATLAB, navegar a la carpeta `matlab/` y ejecutar:
    ```matlab
    RobotController
    ```
@@ -124,7 +127,7 @@ El repositorio ya incluye `platformio.ini` configurado para la placa `esp32dev`.
 
 ```bash
 pip install -r requirements.txt
-python robot_serial_bridge.py
+python tools/robot_serial_bridge.py
 ```
 
 ---

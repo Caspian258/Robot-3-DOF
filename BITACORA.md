@@ -4,6 +4,36 @@ Registro de avances por sesión de trabajo. Orden cronológico descendente (más
 
 ---
 
+## 2026-06-14 — Reorganización de estructura de carpetas
+
+### Qué se hizo y por qué
+
+Reorganización del repositorio para separar responsabilidades por directorio:
+
+| Movimiento | Origen → Destino |
+|---|---|
+| Firmware | `robot3dof_firmware.ino`, `platformio.ini` → `firmware/` |
+| GUI MATLAB | `RobotController.m` → `matlab/` |
+| Herramientas | `robot_serial_bridge.py`, `setup.sh`, `setup.bat` → `tools/` |
+| Docs | `docs/` creada (vacía con `.gitkeep`) |
+
+Todos los movimientos se hicieron con `git mv` para preservar el historial de cada archivo.
+Compilación verificada: `cd firmware && pio run` → `[SUCCESS]` 21.5% Flash, 6.8% RAM.
+README.md, CLAUDE.md y BITACORA.md actualizados con las nuevas rutas.
+
+### Estado actual
+
+Igual que sesión anterior — solo cambió la estructura de carpetas, no el código.
+
+### Próximos pasos
+
+1. **Verificar PULSOS_POR_VUELTA** — conectar M1, enviar `T,360,0,0`, confirmar 1 vuelta exacta
+2. **Probar `tools/robot_serial_bridge.py`** en Linux como alternativa al lock file de MATLAB
+3. **Conectar M2 y M3** — verificar dirección de giro y pines con testMotores()
+4. **Tuning PD** — ajustar Kp/Kd y deadband por motor con el robot físico
+
+---
+
 ## 2026-06-14 — Auditoría, limpieza de repo y correcciones técnicas
 
 ### Qué se hizo y por qué
