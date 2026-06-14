@@ -4,6 +4,30 @@ Registro de avances por sesión de trabajo. Orden cronológico descendente (más
 
 ---
 
+## 2026-06-14 — Corrección de PULSOS_POR_VUELTA (verificación física)
+
+### Qué se hizo y por qué
+
+Corregida la constante `PULSOS_POR_VUELTA` en `firmware/robot3dof_firmware.ino` de **1200** a **1960**.
+
+- **Evidencia física:** con el valor 1200, al enviar `T,360,0,0` el motor M1 giraba solo ~220° en lugar de 360°.
+- **Cálculo teórico:** JGA25-370 con encoder de 6 cables (~7 PPR) × 4× (decodificación de cuadratura) × reducción 70:1 ≈ **1960 counts/rev**.
+- Actualizados `CLAUDE.md` (parámetros de control y nota de verificación) para reflejar el valor correcto.
+
+### Estado actual
+
+| Componente | Estado |
+|---|---|
+| `PULSOS_POR_VUELTA` | ✅ Corregido a 1960 (verificación física M1) |
+
+### Próximos pasos
+
+1. **Verificar en físico** — con el nuevo valor enviar `T,360,0,0` y confirmar 1 vuelta exacta
+2. **Probar robot_serial_bridge.py** en Linux como alternativa permanente al lock file
+3. **Conectar M2 y M3** — verificar dirección de giro y pines
+
+---
+
 ## 2026-06-14 — Reorganización de estructura de carpetas
 
 ### Qué se hizo y por qué

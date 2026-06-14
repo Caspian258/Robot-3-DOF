@@ -18,7 +18,7 @@ const int M2_ENCA = 32; const int M2_ENCB = 33;
 const int M3_ENCA = 4;  const int M3_ENCB = 5;
 
 // --- CONSTANTES ---
-const float PULSOS_POR_VUELTA = 1200.0f;
+const float PULSOS_POR_VUELTA = 1960.0f;
 
 // --- TARGETS Y POSICIÓN ---
 float target_q[3]  = {0.0f, 0.0f, 0.0f};
