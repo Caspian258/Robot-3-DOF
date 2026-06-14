@@ -1,3 +1,0 @@
-[console_scripts]
-pd_gui = motor_controller.pd_gui_node:main
-

@@ -1,3 +1,4 @@
 .pio/
+.vscode/
 CLAUDE.md
 robot_log.csv
