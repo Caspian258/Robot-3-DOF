@@ -41,6 +41,13 @@ bool armed = false;
 // --- CONTADORES DE ENCODER ---
 volatile long encCount[3] = {0, 0, 0};
 
+// Mutex por motor: protege encCount contra race entre isr_A e isr_B del mismo motor
+static portMUX_TYPE encMux[3] = {
+  portMUX_INITIALIZER_UNLOCKED,
+  portMUX_INITIALIZER_UNLOCKED,
+  portMUX_INITIALIZER_UNLOCKED
+};
+
 // --- PD internos ---
 float prev_error[3]     = {0, 0, 0};
 unsigned long last_t[3] = {0, 0, 0};
@@ -48,24 +55,37 @@ int pwm_out[3]          = {0, 0, 0};
 
 // ---------------------------------------------------------------
 //  ISRs — Quadratura completa (CHANGE en A y B)
+//  portENTER/EXIT_CRITICAL_ISR garantiza atomicidad del += en Xtensa
 // ---------------------------------------------------------------
 void IRAM_ATTR isr_M1_A() {
+  portENTER_CRITICAL_ISR(&encMux[0]);
   encCount[0] += (digitalRead(M1_ENCA) == digitalRead(M1_ENCB)) ? 1 : -1;
+  portEXIT_CRITICAL_ISR(&encMux[0]);
 }
 void IRAM_ATTR isr_M1_B() {
+  portENTER_CRITICAL_ISR(&encMux[0]);
   encCount[0] += (digitalRead(M1_ENCA) != digitalRead(M1_ENCB)) ? 1 : -1;
+  portEXIT_CRITICAL_ISR(&encMux[0]);
 }
 void IRAM_ATTR isr_M2_A() {
+  portENTER_CRITICAL_ISR(&encMux[1]);
   encCount[1] += (digitalRead(M2_ENCA) == digitalRead(M2_ENCB)) ? 1 : -1;
+  portEXIT_CRITICAL_ISR(&encMux[1]);
 }
 void IRAM_ATTR isr_M2_B() {
+  portENTER_CRITICAL_ISR(&encMux[1]);
   encCount[1] += (digitalRead(M2_ENCA) != digitalRead(M2_ENCB)) ? 1 : -1;
+  portEXIT_CRITICAL_ISR(&encMux[1]);
 }
 void IRAM_ATTR isr_M3_A() {
+  portENTER_CRITICAL_ISR(&encMux[2]);
   encCount[2] += (digitalRead(M3_ENCA) == digitalRead(M3_ENCB)) ? 1 : -1;
+  portEXIT_CRITICAL_ISR(&encMux[2]);
 }
 void IRAM_ATTR isr_M3_B() {
+  portENTER_CRITICAL_ISR(&encMux[2]);
   encCount[2] += (digitalRead(M3_ENCA) != digitalRead(M3_ENCB)) ? 1 : -1;
+  portEXIT_CRITICAL_ISR(&encMux[2]);
 }
 
 // ---------------------------------------------------------------
