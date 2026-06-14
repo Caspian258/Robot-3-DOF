@@ -2,3 +2,4 @@
 .vscode/
 CLAUDE.md
 robot_log.csv
+__pycache__/
