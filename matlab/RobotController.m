@@ -48,107 +48,119 @@ mainGrid.Padding       = [6 6 6 6];
 mainGrid.RowSpacing    = 6;
 mainGrid.ColumnSpacing = 6;
 
-% ── PANEL IZQUIERDO (scrollable) ──
-% Scrollable='on' en el uipanel permite scroll vertical cuando el contenido
-% supera la altura de la ventana. El grid interior debe tener TODAS las filas
-% con altura fija (sin '1x') para que MATLAB pueda calcular la altura total.
-pnl = uipanel(mainGrid,'BackgroundColor',cPanel,'BorderType','none','Scrollable','on');
+% ── PANEL IZQUIERDO (dos columnas — sin scroll) ──
+% Columna L: DESTINO · SECUENCIA · GANANCIAS PD · ZONA MUERTA  (~504 px)
+% Columna R: CONTROL MANUAL · TEST · CONEXIÓN · CERO · FK · LOG (~724 px)
+% Ambas caben en los ~968 px disponibles sin necesitar scroll.
+pnl = uipanel(mainGrid,'BackgroundColor',cPanel,'BorderType','none');
 pnl.Layout.Row=[1 2]; pnl.Layout.Column=1;
 
-pnlScroll = uigridlayout(pnl,[37,1]);
-pnlScroll.Padding    = [8 8 8 8];
-pnlScroll.RowHeight  = {22,36,36,8, 22,36,36,8, 22,36,36,36,36,8, 22,36,8, 22,22,22,8, 22,44,36,36,8, 36,8, 44,22,36,8, 22,36,36,22,150};
-pnlScroll.RowSpacing = 4;
+pnlInner = uigridlayout(pnl,[1,2]);
+pnlInner.Padding       = [4 4 4 4];
+pnlInner.ColumnSpacing = 6;
+pnlInner.ColumnWidth   = {'1x','1x'};
 
-% [1-4] DESTINO
-mkLabel(pnlScroll,'▸ DESTINO (mm)', 14, cAccent);
-gXYZ = uigridlayout(pnlScroll,[1,6]); gXYZ.Padding=[0 0 0 0]; gXYZ.ColumnSpacing=4;
+% ── COLUMNA IZQUIERDA ──
+pnlL = uigridlayout(pnlInner,[16,1]);
+pnlL.Padding    = [4 4 4 4];
+pnlL.RowHeight  = {22,36,36,8, 22,36,36,8, 22,36,36,36,36,8, 22,36};
+pnlL.RowSpacing = 4;
+
+% DESTINO
+mkLabel(pnlL,'▸ DESTINO (mm)', 13, cAccent);
+gXYZ = uigridlayout(pnlL,[1,6]); gXYZ.Padding=[0 0 0 0]; gXYZ.ColumnSpacing=3;
 uilabel(gXYZ,'Text','X','FontColor','w','HorizontalAlignment','right');
 efX = mkEdit(gXYZ, 165.69);
 uilabel(gXYZ,'Text','Y','FontColor','w','HorizontalAlignment','right');
 efY = mkEdit(gXYZ, 0);
 uilabel(gXYZ,'Text','Z','FontColor','w','HorizontalAlignment','right');
 efZ = mkEdit(gXYZ, 305);
-btnGo = uibutton(pnlScroll,'push','Text','⟶  EJECUTAR TRAYECTORIA',...
-  'BackgroundColor',cAccent,'FontWeight','bold','FontColor',[0 0 0]);
-uilabel(pnlScroll,'Text',''); % Spacer
+btnGo = uibutton(pnlL,'push','Text','→ EJECUTAR TRAYECTORIA',...
+  'BackgroundColor',cAccent,'FontWeight','bold','FontColor',[0 0 0],'FontSize',11);
+uilabel(pnlL,'Text','');
 
-% [5-8] SECUENCIA
-mkLabel(pnlScroll,'▸ SECUENCIA (P1 ↔ P2)', 13, [0.9 0.8 0.2]);
-gSeq1 = uigridlayout(pnlScroll,[1,2]); gSeq1.Padding=[0 0 0 0]; gSeq1.ColumnSpacing=4;
-btnSave1 = uibutton(gSeq1,'push','Text','[1] Guardar Pos 1', 'BackgroundColor',[0.2 0.4 0.6],'FontColor','w');
-btnSave2 = uibutton(gSeq1,'push','Text','[2] Guardar Pos 2', 'BackgroundColor',[0.2 0.6 0.4],'FontColor','w');
-gSeq2 = uigridlayout(pnlScroll,[1,2]); gSeq2.Padding=[0 0 0 0]; gSeq2.ColumnSpacing=4;
-btnRunSeq = uibutton(gSeq2,'push','Text','▶ EJECUTAR (8x)', 'BackgroundColor',[0.9 0.8 0.2],'FontWeight','bold','FontColor',[0 0 0]);
-btnStopSeq = uibutton(gSeq2,'push','Text','■ DETENER', 'BackgroundColor',cRed,'FontWeight','bold','FontColor','w','Enable','off');
-uilabel(pnlScroll,'Text',''); % Spacer
+% SECUENCIA
+mkLabel(pnlL,'▸ SECUENCIA (P1 ↔ P2)', 12, [0.9 0.8 0.2]);
+gSeq1 = uigridlayout(pnlL,[1,2]); gSeq1.Padding=[0 0 0 0]; gSeq1.ColumnSpacing=4;
+btnSave1 = uibutton(gSeq1,'push','Text','[1] Guardar Pos 1','BackgroundColor',[0.2 0.4 0.6],'FontColor','w');
+btnSave2 = uibutton(gSeq1,'push','Text','[2] Guardar Pos 2','BackgroundColor',[0.2 0.6 0.4],'FontColor','w');
+gSeq2 = uigridlayout(pnlL,[1,2]); gSeq2.Padding=[0 0 0 0]; gSeq2.ColumnSpacing=4;
+btnRunSeq = uibutton(gSeq2,'push','Text','▶ EJECUTAR (8x)','BackgroundColor',[0.9 0.8 0.2],'FontWeight','bold','FontColor',[0 0 0]);
+btnStopSeq = uibutton(gSeq2,'push','Text','■ DETENER','BackgroundColor',cRed,'FontWeight','bold','FontColor','w','Enable','off');
+uilabel(pnlL,'Text','');
 
-% [9-14] GANANCIAS PD
-mkLabel(pnlScroll,'▸ GANANCIAS PD', 14, cWarn);
-[efP1,efD1] = motorRow(pnlScroll,'M1 Base  ', motorColors{1}, 10.0, 0.05);
-[efP2,efD2] = motorRow(pnlScroll,'M2 Hombro', motorColors{2}, 10.0, 0.05);
-[efP3,efD3] = motorRow(pnlScroll,'M3 Codo  ', motorColors{3}, 10.0, 0.05);
-btnPD = uibutton(pnlScroll,'push','Text','↻  ACTUALIZAR GANANCIAS',...
+% GANANCIAS PD
+mkLabel(pnlL,'▸ GANANCIAS PD', 13, cWarn);
+[efP1,efD1] = motorRow(pnlL,'M1 Base  ', motorColors{1}, 10.0, 0.05);
+[efP2,efD2] = motorRow(pnlL,'M2 Hombro', motorColors{2}, 10.0, 0.05);
+[efP3,efD3] = motorRow(pnlL,'M3 Codo  ', motorColors{3}, 10.0, 0.05);
+btnPD = uibutton(pnlL,'push','Text','↻ ACTUALIZAR GANANCIAS',...
   'BackgroundColor',cWarn,'FontWeight','bold','FontColor',[0 0 0]);
-uilabel(pnlScroll,'Text',''); % Spacer
+uilabel(pnlL,'Text','');
 
-% [15-17] ZONA MUERTA
-mkLabel(pnlScroll,'▸ ZONA MUERTA (°)', 13, [0.7 0.5 0.9]);
-gDB = uigridlayout(pnlScroll,[1,6]); gDB.Padding=[0 0 0 0]; gDB.ColumnSpacing=4;
+% ZONA MUERTA
+mkLabel(pnlL,'▸ ZONA MUERTA (°)', 12, [0.7 0.5 0.9]);
+gDB = uigridlayout(pnlL,[1,6]); gDB.Padding=[0 0 0 0]; gDB.ColumnSpacing=3;
 uilabel(gDB,'Text','M1','FontColor','w'); efDB1 = mkEdit(gDB, 2.0);
 uilabel(gDB,'Text','M2','FontColor','w'); efDB2 = mkEdit(gDB, 2.0);
 uilabel(gDB,'Text','M3','FontColor','w'); efDB3 = mkEdit(gDB, 2.0);
-uilabel(pnlScroll,'Text',''); % Spacer
 
-% [18-21] CONTROL MANUAL (TECLADO)
-mkLabel(pnlScroll,'▸ CONTROL MANUAL (teclado)', 13, [0.85 0.85 0.50]);
-uilabel(pnlScroll,'Text','A/D → M1 ±5°     W/S → M2 ±5°     Q/E → M3 ±5°',...
+% ── COLUMNA DERECHA ──
+pnlR = uigridlayout(pnlInner,[20,1]);
+pnlR.Padding    = [4 4 4 4];
+pnlR.RowHeight  = {22,22,22,8, 22,44,36,36,8, 36,8, 44,22,36,8, 22,36,36,22,150};
+pnlR.RowSpacing = 4;
+
+% CONTROL MANUAL
+mkLabel(pnlR,'▸ CONTROL MANUAL (teclado)', 12, [0.85 0.85 0.50]);
+uilabel(pnlR,'Text','A/D→M1  W/S→M2  Q/E→M3  (±5°/tecla)',...
   'FontColor',[0.75 0.75 0.75],'FontSize',10,'BackgroundColor',cPanel);
-uilabel(pnlScroll,'Text','[ESPACIO] → DISARM (emergencia)     [R] → ZERO',...
+uilabel(pnlR,'Text','ESPACIO = DISARM  |  R = ZERO',...
   'FontColor',cRed,'FontSize',10,'FontWeight','bold','BackgroundColor',cPanel);
-uilabel(pnlScroll,'Text',''); % Spacer
+uilabel(pnlR,'Text','');
 
-% [22-26] TEST DE MOTORES
-mkLabel(pnlScroll,'▸ TEST MOTORES', 13, cPurple);
-btnTest = uibutton(pnlScroll,'push','Text','▶  VERIFICAR LOS 3 MOTORES',...
+% TEST MOTORES
+mkLabel(pnlR,'▸ TEST MOTORES', 12, cPurple);
+btnTest = uibutton(pnlR,'push','Text','▶ VERIFICAR 3 MOTORES',...
   'BackgroundColor',cPurple,'FontWeight','bold','FontColor','w');
-btnStop = uibutton(pnlScroll,'push','Text','■  PARAR PRUEBA',...
+btnStop = uibutton(pnlR,'push','Text','■ PARAR PRUEBA',...
   'BackgroundColor',[0.6 0.1 0.1],'FontWeight','bold','FontColor','w','Enable','off');
-gMotInd = uigridlayout(pnlScroll,[1,3]); gMotInd.Padding=[0 0 0 0]; gMotInd.ColumnSpacing=4;
-btnM1 = uibutton(gMotInd,'push','Text','▶ M1', 'BackgroundColor',motorColors{1},'FontColor',[0 0 0],'FontWeight','bold');
-btnM2 = uibutton(gMotInd,'push','Text','▶ M2', 'BackgroundColor',motorColors{2},'FontColor',[0 0 0],'FontWeight','bold');
-btnM3 = uibutton(gMotInd,'push','Text','▶ M3', 'BackgroundColor',motorColors{3},'FontColor',[0 0 0],'FontWeight','bold');
-uilabel(pnlScroll,'Text',''); % Spacer
+gMotInd = uigridlayout(pnlR,[1,3]);
+gMotInd.Padding=[0 0 0 0]; gMotInd.ColumnSpacing=4;
+btnM1 = uibutton(gMotInd,'push','Text','▶ M1','BackgroundColor',motorColors{1},'FontColor',[0 0 0],'FontWeight','bold');
+btnM2 = uibutton(gMotInd,'push','Text','▶ M2','BackgroundColor',motorColors{2},'FontColor',[0 0 0],'FontWeight','bold');
+btnM3 = uibutton(gMotInd,'push','Text','▶ M3','BackgroundColor',motorColors{3},'FontColor',[0 0 0],'FontWeight','bold');
+uilabel(pnlR,'Text','');
 
-% [23-24] CONEXIÓN
-gSerial = uigridlayout(pnlScroll,[1,3]); gSerial.Padding=[0 0 0 0]; gSerial.ColumnSpacing=4;
-gSerial.ColumnWidth = {'1x',36,80};
+% CONEXIÓN
+gSerial = uigridlayout(pnlR,[1,3]);
+gSerial.Padding=[0 0 0 0]; gSerial.ColumnSpacing=4; gSerial.ColumnWidth={'1x',32,72};
 ddPort     = uidropdown(gSerial,'Items',serialportlist("available"),'BackgroundColor',cPanel2,'FontColor','w');
-btnRefresh = uibutton(gSerial,'push','Text','⟳','BackgroundColor',[0.18 0.22 0.30],'FontColor','w','Tooltip','Actualizar lista de puertos');
+btnRefresh = uibutton(gSerial,'push','Text','⟳','BackgroundColor',[0.18 0.22 0.30],'FontColor','w','Tooltip','Actualizar puertos');
 btnConnect = uibutton(gSerial,'push','Text','CONECTAR','BackgroundColor',[0.2 0.5 0.8],'FontColor','w');
-uilabel(pnlScroll,'Text',''); % Spacer
+uilabel(pnlR,'Text','');
 
-% [25-28] CALIBRACIÓN / CERO
-btnFree = uibutton(pnlScroll,'push','Text','⚡  SOLTAR CORRIENTE  (mover robot a mano)',...
+% CALIBRACIÓN / CERO
+btnFree = uibutton(pnlR,'push','Text','⚡ SOLTAR CORRIENTE',...
   'BackgroundColor',[0.70 0.35 0.00],'FontWeight','bold','FontColor','w','FontSize',12);
-mkLabel(pnlScroll,'▸ POSICIÓN CERO  —  coloca el robot en L invertida, luego:', 12, cOk);
-btnZero = uibutton(pnlScroll,'push','Text','[ ] REGISTRAR CERO  (activa y mantiene L invertida)',...
+mkLabel(pnlR,'▸ CERO — coloca en L invertida:', 11, cOk);
+btnZero = uibutton(pnlR,'push','Text','⊙ REGISTRAR POSICIÓN CERO',...
   'BackgroundColor',[0.05 0.40 0.15],'FontWeight','bold','FontColor','w','FontSize',11);
-uilabel(pnlScroll,'Text',''); % Spacer
+uilabel(pnlR,'Text','');
 
-% [29-33] CINEMÁTICA DIRECTA
-mkLabel(pnlScroll,'▸ CINEMÁTICA DIRECTA (°)', 13, [0.85 0.65 0.20]);
-gFK = uigridlayout(pnlScroll,[1,6]); gFK.Padding=[0 0 0 0]; gFK.ColumnSpacing=4;
-uilabel(gFK,'Text','θ1','FontColor',[0.85 0.65 0.20],'HorizontalAlignment','right','FontSize',12);
+% CINEMÁTICA DIRECTA
+mkLabel(pnlR,'▸ CINEMÁTICA DIRECTA (°)', 12, [0.85 0.65 0.20]);
+gFK = uigridlayout(pnlR,[1,6]); gFK.Padding=[0 0 0 0]; gFK.ColumnSpacing=3;
+uilabel(gFK,'Text','θ1','FontColor',[0.85 0.65 0.20],'HorizontalAlignment','right','FontSize',11);
 efFK1 = mkEdit(gFK, 0);
-uilabel(gFK,'Text','θ2','FontColor',[0.85 0.65 0.20],'HorizontalAlignment','right','FontSize',12);
+uilabel(gFK,'Text','θ2','FontColor',[0.85 0.65 0.20],'HorizontalAlignment','right','FontSize',11);
 efFK2 = mkEdit(gFK, 0);
-uilabel(gFK,'Text','θ3','FontColor',[0.85 0.65 0.20],'HorizontalAlignment','right','FontSize',12);
+uilabel(gFK,'Text','θ3','FontColor',[0.85 0.65 0.20],'HorizontalAlignment','right','FontSize',11);
 efFK3 = mkEdit(gFK, 0);
-btnFK = uibutton(pnlScroll,'push','Text','↗  ENVIAR ÁNGULOS',...
+btnFK = uibutton(pnlR,'push','Text','↗ ENVIAR ÁNGULOS',...
   'BackgroundColor',[0.55 0.40 0.10],'FontWeight','bold','FontColor','w','FontSize',12);
-mkLabel(pnlScroll,'▸ LOG', 11, [0.5 0.5 0.5]);
-txtLog = uitextarea(pnlScroll,'BackgroundColor',[0 0 0],'FontColor',[0 0.9 0.3],'Editable',false,'FontSize',10);
+mkLabel(pnlR,'▸ LOG', 11, [0.5 0.5 0.5]);
+txtLog = uitextarea(pnlR,'BackgroundColor',[0 0 0],'FontColor',[0 0.9 0.3],'Editable',false,'FontSize',10);
 
 % ── AXES 3D ──
 ax3D = uiaxes(mainGrid,'Color',cBg);
