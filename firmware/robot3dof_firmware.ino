@@ -33,8 +33,8 @@ float target_q[3]  = {0.0f, 0.0f, 0.0f};
 float current_q[3] = {0.0f, 0.0f, 0.0f};
 
 // --- GANANCIAS PD ---
-float Kp[3] = {10.0f, 10.0f, 10.0f};
-float Kd[3] = {0.05f, 0.05f, 0.05f};
+float Kp[3] = {6.0f, 6.0f, 6.0f};
+float Kd[3] = {0.08f, 0.08f, 0.08f};
 
 // --- ZONA MUERTA (grados) — reducida de 5° a 2° para responder a ángulos pequeños ---
 float deadband[3] = {2.0f, 2.0f, 2.0f};
@@ -65,6 +65,16 @@ int pwm_out[3]          = {0, 0, 0};
 long enc_prev[3]  = {0, 0, 0};
 int  stall_cnt[3] = {0, 0, 0};
 bool fault[3]     = {false, false, false};
+
+// --- RATE LIMITER ---
+// Rampa de velocidad: si el salto es >30°, avanza 1°/ciclo (10°/100ms a 100 Hz)
+float target_ramp[3] = {0.0f, 0.0f, 0.0f};
+const float RATE_MAX  = 1.0f;
+
+// --- FILTRO DERIVATIVO ---
+// Pasa-bajo en la derivada: reduce picos al cambiar setpoint
+float d_prev[3]    = {0.0f, 0.0f, 0.0f};
+const float D_ALPHA = 0.7f;
 
 // ---------------------------------------------------------------
 //  ISRs — Quadratura completa (CHANGE en A y B)
@@ -158,6 +168,17 @@ void loop() {
   current_q[1] = (c1 / PULSOS_POR_VUELTA) * 360.0f;
   current_q[2] = (c2 / PULSOS_POR_VUELTA) * 360.0f;
 
+  // Rate limiter: avanza target_ramp hacia target_q en pasos de RATE_MAX
+  for (int i = 0; i < 3; i++) {
+    float diff = target_q[i] - target_ramp[i];
+    if (fabsf(diff) > RATE_MAX) {
+      target_ramp[i] += (diff > 0) ? RATE_MAX : -RATE_MAX;
+      if (armed) holding[i] = false;  // mantener activo mientras rampa avanza
+    } else {
+      target_ramp[i] = target_q[i];
+    }
+  }
+
   if (armed) {
     controlMotor(0, M1_IN1, M1_IN2, M1_ENA);
     controlMotor(1, M2_IN1, M2_IN2, M2_ENA);
@@ -199,7 +220,7 @@ void controlMotor(int idx, int in1, int in2, int ena) {
     return;
   }
 
-  float error = target_q[idx] - current_q[idx];
+  float error = target_ramp[idx] - current_q[idx];
 
   if (holding[idx]) {
     // Reactivar solo si el error supera 1.5× deadband (más sensible que 2×
@@ -230,8 +251,9 @@ void controlMotor(int idx, int in1, int in2, int ena) {
   if (dt <= 0.0f) dt = 0.01f;
   if (dt > 0.1f)  dt = 0.1f;   // clamp: evita spike si el loop se pausa
 
-  float derivative = (error - prev_error[idx]) / dt;
-  int power = (int)(fabsf(error * Kp[idx] + derivative * Kd[idx]));
+  float d_raw      = (error - prev_error[idx]) / dt;
+  d_prev[idx]      = D_ALPHA * d_prev[idx] + (1.0f - D_ALPHA) * d_raw;
+  int power = (int)(fabsf(error * Kp[idx] + d_prev[idx] * Kd[idx]));
   if (power > 255) power = 255;
   // PWM mínimo proporcional al error para arranque suave cerca de la zona muerta
   int min_pwm = (fabsf(error) < deadband[idx] * 3.0f) ? 20 : 35;
@@ -308,6 +330,15 @@ void procesarSerial() {
             Serial.println(lm);
           }
         }
+        // Rate limiter: saltos >30° arrancan desde posición actual
+        for (int i = 0; i < 3; i++) {
+          if (fabsf(target_q[i] - current_q[i]) > 30.0f) {
+            target_ramp[i] = current_q[i];
+          } else {
+            target_ramp[i] = target_q[i];
+          }
+          d_prev[i] = 0.0f;
+        }
         // Nuevo target → salir de holding, resetear contadores de stall
         for (int i = 0; i < 3; i++) stall_cnt[i] = 0;
         holding[0] = holding[1] = holding[2] = false;
@@ -338,6 +369,7 @@ void procesarSerial() {
       encCount[0] = encCount[1] = encCount[2] = 0;
       interrupts();
       target_q[0] = target_q[1] = target_q[2] = 0.0f;
+      for (int i = 0; i < 3; i++) { target_ramp[i] = 0.0f; d_prev[i] = 0.0f; }
       holding[0]  = holding[1]  = holding[2]  = true;
       for (int i = 0; i < 3; i++) { fault[i] = false; stall_cnt[i] = 0; }
       armed = false;
