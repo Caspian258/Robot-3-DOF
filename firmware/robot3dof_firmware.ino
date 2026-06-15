@@ -28,8 +28,8 @@ float current_q[3] = {0.0f, 0.0f, 0.0f};
 float Kp[3] = {10.0f, 10.0f, 10.0f};
 float Kd[3] = {0.05f, 0.05f, 0.05f};
 
-// --- ZONA MUERTA (grados) — 5° validado en prueba física ---
-float deadband[3] = {5.0f, 5.0f, 5.0f};
+// --- ZONA MUERTA (grados) — reducida de 5° a 2° para responder a ángulos pequeños ---
+float deadband[3] = {2.0f, 2.0f, 2.0f};
 
 // --- ESTADO POR MOTOR ---
 // false = controlando activamente, true = ya llegó y está en reposo
