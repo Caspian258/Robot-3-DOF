@@ -4,6 +4,49 @@ Registro de avances por sesión de trabajo. Orden cronológico descendente (más
 
 ---
 
+## 2026-06-14 — Revisión control PD, corrección visual M2/M3 y mejoras GUI
+
+### Qué se hizo y por qué
+
+**Fase 2A — MATLAB (`matlab/RobotController.m`):**
+
+| Cambio | Motivo |
+|---|---|
+| Negar `current_q(2/3)` antes de sumar `home_q` en `leerTelemetria()` y `leerUnFrame()` | La convención del encoder de M2/M3 es opuesta a la cinemática: el encoder lee negativo cuando el motor va físicamente positivo (corrección INVERTIDO es eléctrica, no invierte ISR) |
+| Negar `q_fw(2/3)` en `moverRobot()` antes de enviar `T,` | Para que IK→firmware sea coherente con la misma convención |
+| Negar `fw_target1/2(2/3)` en `runSequence()` | Para que `esperarPosicionMulti()` compare contra el valor de encoder que el firmware realmente alcanzará |
+| Parsear `FAULT:` y `LIMIT:` en `leerTelemetria()` y mostrar en LOG | Antes se descartaban silenciosamente; ahora aparecen como `[!] FAULT:M1 — motor bloqueado` |
+| Buffer CSV: acumular 50 tramas antes de escribir a disco | Elimina `fopen/fclose` 100×/s → reduce carga de I/O |
+
+**Fase 2B — Firmware (`firmware/robot3dof_firmware.ino`):**
+
+| Cambio | Valor anterior | Valor nuevo | Motivo |
+|---|---|---|---|
+| Kp | 10.0 | 6.0 | Reduce overshoot con errores grandes (Kp=10 → PWM saturado a 255 inmediato) |
+| Kd | 0.05 | 0.08 | Mayor amortiguación para compensar Kp reducido |
+| Filtro derivativo | sin filtro | α=0.7 (`d_f = 0.7*d_prev + 0.3*d_raw`) | Elimina picos derivativos al cambiar setpoint bruscamente |
+| Rate limiter | sin rate limit | 1°/ciclo si salto >30° | Previene saturación de PWM al inicio de movimientos grandes; arranca desde `current_q` |
+
+El rate limiter cancela el estado `holding` mientras la rampa avanza, para que el motor siga activamente la rampa sin necesitar esperar a superar `1.5×deadband`.
+
+### Estado actual
+
+| Componente | Estado |
+|---|---|
+| Animación 3D M2/M3 | ✅ Corregida — convención de encoder M2/M3 compensada en visualización |
+| IK→firmware M2/M3 | ✅ Corregido — setpoints negados para encoder invertido |
+| FAULT/LIMIT en GUI | ✅ Visibles en LOG de la GUI |
+| CSV buffering | ✅ Escribe cada 50 tramas en vez de cada frame |
+| Control PD | ✅ Kp=6 / Kd=0.08 / filtro derivativo α=0.7 / rate limiter 1°/ciclo |
+
+### Próximos pasos
+
+1. **Verificar con robot físico** — enviar T,0,20,0 y confirmar que M2 va a +20° físicos
+2. **Tuning fino** si Kp=6 resulta muy lento: considerar subir a 7-8 para M1 (más inercia)
+3. **Verificar animación** — en posición cero el brazo debe mostrar la "L invertida" (home=[0,90,-90])
+
+---
+
 ## 2026-06-14 — Diagnóstico completo + protección anti-atasco + control por teclado
 
 ### Qué se hizo y por qué
