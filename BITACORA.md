@@ -4,6 +4,54 @@ Registro de avances por sesión de trabajo. Orden cronológico descendente (más
 
 ---
 
+## 2026-06-14 — Diagnóstico completo + protección anti-atasco + control por teclado
+
+### Qué se hizo y por qué
+
+**Diagnóstico físico con `tools/diagnostico_movimiento.py`:**
+
+Hallazgos críticos encontrados al correr la secuencia de pruebas:
+
+| Motor | Resultado | Causa |
+|---|---|---|
+| M1 (Base) | Converge lentamente (~85-90% en 4s) | Kp=10 bajo para la inercia del sistema |
+| M2 (Hombro) | **Dirección INVERTIDA** — corrió a -49.6° al pedir +10° | Wiring: encoder/motor en convención opuesta |
+| M3 (Codo) | **Dirección INVERTIDA + atasco** — PWM=255 en posición incorrecta | Igual que M2, chocó contra tope mecánico |
+
+**Fase 3 — Firmware (`firmware/robot3dof_firmware.ino`):**
+- `INVERTIDO[3] = {false, true, true}`: corrige dirección de M2 y M3 via XOR en la lógica de dirección (sin tocar hardware ni ISRs)
+- Límites por software `LIMIT_NEG/LIMIT_POS`: clampea setpoints a ±80°/±45°/±45°, responde `LIMIT:M{n}` si se supera
+- Anti-atasco: PWM>150 y encoder quieto (<5 counts) durante 500ms → `FAULT:M{n}`, motor apagado hasta ZERO o DISARM
+- Deadband reducida de 5° a 2° (commit anterior): ángulo mínimo funcional ~3°
+- GUI default de deadband actualizado de 5° a 2° para consistencia
+
+**Fase 4 — MATLAB (`matlab/RobotController.m`):**
+- Panel "CONTROL MANUAL (teclado)" en la GUI
+- `fig.KeyPressFcn` → `teclasRobot()`: A/D=M1, W/S=M2, Q/E=M3 (±5°/tecla), Espacio=DISARM, R=ZERO
+- Respeta límites ±80°/±45°/±45° antes de enviar comando
+- Loguea cada acción en el panel LOG
+
+### Estado actual
+
+| Componente | Estado |
+|---|---|
+| M1 (Base) | ✅ Dirección correcta — converge, algo lento |
+| M2 (Hombro) | ✅ Dirección corregida por software (INVERTIDO[1]=true) |
+| M3 (Codo) | ✅ Dirección corregida por software (INVERTIDO[2]=true) |
+| Anti-atasco | ✅ Implementado — FAULT:M{n} si 500ms sin movimiento con PWM>150 |
+| Límites software | ✅ Implementados — LIMIT:M{n} si setpoint supera topes |
+| Control teclado | ✅ A/D/W/S/Q/E + Espacio + R en la GUI MATLAB |
+| PULSOS_POR_VUELTA | ⚠️ 1960 (teórico) — pendiente verificación M1 con nueva dirección de M2/M3 |
+
+### Próximos pasos
+
+1. **Verificar M2 y M3** con la nueva dirección — enviar T,0,20,0 y T,0,0,20
+2. **Tuning Kp M1** — considerar subir de 10 a 15-20 si sigue convergiendo lento
+3. **Verificar PULSOS_POR_VUELTA** — confirmar 1 vuelta exacta en los 3 motores
+4. **Probar control por teclado** con robot físico conectado
+
+---
+
 ## 2026-06-14 — Corrección de PULSOS_POR_VUELTA (verificación física)
 
 ### Qué se hizo y por qué
