@@ -330,10 +330,14 @@ log_('Sistema listo. Conecta el ESP32.');
     % CORRECCIÓN DE COORDENADAS: 
     % ikRobot da ángulos físicos absolutos (ej. 90°), pero el encoder mide relativo al home (ej. 0°)
     [q_des1, ~] = ikRobot(st.pos1 / 1000, p);
-    fw_target1 = rad2deg(q_des1) - st.home_q; 
-    
+    fw_target1 = rad2deg(q_des1) - st.home_q;
+    fw_target1(2) = -fw_target1(2);
+    fw_target1(3) = -fw_target1(3);
+
     [q_des2, ~] = ikRobot(st.pos2 / 1000, p);
-    fw_target2 = rad2deg(q_des2) - st.home_q; 
+    fw_target2 = rad2deg(q_des2) - st.home_q;
+    fw_target2(2) = -fw_target2(2);
+    fw_target2(3) = -fw_target2(3);
 
     for rep = 1:8
       if ~isvalid(fig); break; end
@@ -402,6 +406,8 @@ log_('Sistema listo. Conecta el ESP32.');
     setSt(st);
 
     q_fw = st.target_q - st.home_q;
+    q_fw(2) = -q_fw(2);
+    q_fw(3) = -q_fw(3);
     efFK1.Value = round(q_fw(1), 2);
     efFK2.Value = round(q_fw(2), 2);
     efFK3.Value = round(q_fw(3), 2);
@@ -409,10 +415,9 @@ log_('Sistema listo. Conecta el ESP32.');
     dibujarRobot(ax3D, q_des, p, motorColors, false);
 
     if st.connected
-      fw  = st.target_q - st.home_q;
-      cmd = sprintf('T,%.2f,%.2f,%.2f', fw(1), fw(2), fw(3));
+      cmd = sprintf('T,%.2f,%.2f,%.2f', q_fw(1), q_fw(2), q_fw(3));
       writeline(st.port, cmd);
-      log_(['>> ' cmd ' (física: ' sprintf('%.1f°,%.1f°,%.1f°', st.target_q) ')']);
+      log_(['>> ' cmd ' (fisica: ' sprintf('%.1f,%.1f,%.1f deg', st.target_q) ')']);
     end
   end
 
@@ -594,16 +599,19 @@ log_('Sistema listo. Conecta el ESP32.');
     setappdata(fig,'st',st);
     
     if isvalid(fig)
-      q_phys = st.current_q + st.home_q;
+      q_vis = st.current_q;
+      q_vis(2) = -st.current_q(2);
+      q_vis(3) = -st.current_q(3);
+      q_phys = q_vis + st.home_q;
       dibujarRobot(ax3D, deg2rad(q_phys), p, motorColors, false);
       lblAngulos.Text = sprintf('θ1: %.1f°   θ2: %.1f°   θ3: %.1f°', q_phys(1), q_phys(2), q_phys(3));
-      
+
       t1=deg2rad(q_phys(1)); t2=deg2rad(q_phys(2)); t3=deg2rad(q_phys(3));
       r_=p.L2*cos(t2)+p.L3*cos(t3+pi/2);
       efX.Value=round(r_*cos(t1)*1000,2);
       efY.Value=round(r_*sin(t1)*1000,2);
       efZ.Value=round((p.L1+p.L2*sin(t2)+p.L3*sin(t3+pi/2))*1000,2);
-      
+
       efFK1.Value=round(st.current_q(1),2);
       efFK2.Value=round(st.current_q(2),2);
       efFK3.Value=round(st.current_q(3),2);
@@ -861,8 +869,10 @@ log_('Sistema listo. Conecta el ESP32.');
 %  TELEMETRÍA
 % ============================================================
   function leerTelemetria()
-    persistent last_draw_t;
+    persistent last_draw_t csv_buf csv_cnt;
     if isempty(last_draw_t); last_draw_t = 0; end
+    if isempty(csv_buf); csv_buf = ''; end
+    if isempty(csv_cnt); csv_cnt = 0; end
     try
       st = getappdata(fig,'st');
       if ~st.connected || isempty(st.port) || ~isvalid(st.port); return; end
@@ -872,6 +882,14 @@ log_('Sistema listo. Conecta el ESP32.');
     catch; return; end
     
     lines = strsplit(raw_all, char(10));
+    for k = 1:numel(lines)
+      candidate = strtrim(lines{k});
+      if startsWith(candidate, 'FAULT:')
+        log_(['[!] ' candidate ' — motor bloqueado. Enviar ZERO o DISARM.']);
+      elseif startsWith(candidate, 'LIMIT:')
+        log_(['[!] ' candidate ' — setpoint fuera de rango, ajustado al limite.']);
+      end
+    end
     raw = '';
     for k = numel(lines):-1:1
       candidate = strtrim(lines{k});
@@ -888,12 +906,14 @@ log_('Sistema listo. Conecta el ESP32.');
     st.pwm       = vals(7:9)';
     t_now        = toc(st.t0);
     
-    logFile = fopen('robot_log.csv', 'a');
-    if logFile ~= -1
-      fprintf(logFile, '%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d\n', ...
-        t_now, vals(1), vals(2), vals(3), vals(4), vals(5), vals(6), ...
-        int32(vals(7)), int32(vals(8)), int32(vals(9)));
-      fclose(logFile);
+    csv_buf = [csv_buf, sprintf('%.3f,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%d,%d,%d\n', ...
+      t_now, vals(1), vals(2), vals(3), vals(4), vals(5), vals(6), ...
+      int32(vals(7)), int32(vals(8)), int32(vals(9)))];
+    csv_cnt = csv_cnt + 1;
+    if csv_cnt >= 50
+      fid = fopen('robot_log.csv', 'a');
+      if fid ~= -1; fwrite(fid, csv_buf); fclose(fid); end
+      csv_buf = ''; csv_cnt = 0;
     end
     
     st.time     = [st.time,     t_now     ];
@@ -914,10 +934,13 @@ log_('Sistema listo. Conecta el ESP32.');
     if (t_now - last_draw_t) > 0.04
       last_draw_t = t_now;
       if isvalid(fig)
-        q_phys = st.current_q + st.home_q;
+        q_vis = st.current_q;
+        q_vis(2) = -st.current_q(2);
+        q_vis(3) = -st.current_q(3);
+        q_phys = q_vis + st.home_q;
         dibujarRobot(ax3D, deg2rad(q_phys), p, motorColors, false);
         lblAngulos.Text = sprintf('θ1: %.1f°   θ2: %.1f°   θ3: %.1f°', q_phys(1), q_phys(2), q_phys(3));
-        
+
         t1=deg2rad(q_phys(1)); t2=deg2rad(q_phys(2)); t3=deg2rad(q_phys(3));
         r_=p.L2*cos(t2)+p.L3*cos(t3+pi/2);
         efX.Value=round(r_*cos(t1)*1000,2);
