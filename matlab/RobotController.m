@@ -48,14 +48,16 @@ mainGrid.Padding       = [6 6 6 6];
 mainGrid.RowSpacing    = 6;
 mainGrid.ColumnSpacing = 6;
 
-% ── PANEL IZQUIERDO ──
-pnl = uipanel(mainGrid,'BackgroundColor',cPanel,'BorderType','none');
+% ── PANEL IZQUIERDO (scrollable) ──
+% Scrollable='on' en el uipanel permite scroll vertical cuando el contenido
+% supera la altura de la ventana. El grid interior debe tener TODAS las filas
+% con altura fija (sin '1x') para que MATLAB pueda calcular la altura total.
+pnl = uipanel(mainGrid,'BackgroundColor',cPanel,'BorderType','none','Scrollable','on');
 pnl.Layout.Row=[1 2]; pnl.Layout.Column=1;
-pg = uigridlayout(pnl,[1,1]); pg.Padding=[8 8 8 8];
 
-% Configuración de filas del layout izquierdo (33 filas en total)
-pnlScroll = uigridlayout(pg,[37,1]);
-pnlScroll.RowHeight = {22,36,36,8, 22,36,36,8, 22,36,36,36,36,8, 22,36,8, 22,22,22,8, 22,44,36,36,8, 36,8, 44,22,36,8, 22,36,36,22,'1x'};
+pnlScroll = uigridlayout(pnl,[37,1]);
+pnlScroll.Padding    = [8 8 8 8];
+pnlScroll.RowHeight  = {22,36,36,8, 22,36,36,8, 22,36,36,36,36,8, 22,36,8, 22,22,22,8, 22,44,36,36,8, 36,8, 44,22,36,8, 22,36,36,22,150};
 pnlScroll.RowSpacing = 4;
 
 % [1-4] DESTINO
