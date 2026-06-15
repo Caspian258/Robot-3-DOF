@@ -4,6 +4,43 @@ Registro de avances por sesión de trabajo. Orden cronológico descendente (más
 
 ---
 
+## 2026-06-14 — Rediseño GUI en 3 columnas
+
+### Qué se hizo y por qué
+
+Layout anterior (2 columnas internas dentro de un panel de 390px) dejaba solo ~192px por columna → textos cortados, botones demasiado pequeños.
+
+Solución: **3 columnas independientes en `mainGrid`**:
+
+| Columna | Ancho | Contenido |
+|---|---|---|
+| C1 (pnlC1 / g1) | 280 px fijo | DESTINO · SECUENCIA · GANANCIAS PD · ZONA MUERTA |
+| C2 (pnlC2 / g2) | 280 px fijo | CONTROL MANUAL · TEST MOTORES · CONEXIÓN · CERO · FK · LOG |
+| C3 | 1x (resto) | Modelo 3D + gráfica de control |
+
+Cambios adicionales:
+- `RowHeight` de mainGrid: `{'1x', 260}` (panel inferior ligeramente más bajo que antes para dar más espacio al 3D)
+- Valores por defecto de Kp/Kd corregidos a **6.0/0.08** (firmware actual; antes mostraban 10.0/0.05)
+- Deadband default: 2.0° (ya correcto desde sesión anterior)
+- `FontSize` uniformado a 11-13 en todos los controles para legibilidad completa
+- Labels descriptivos en CERO y SOLTAR CORRIENTE explican la acción al usuario
+
+### Estado actual
+
+| Componente | Estado |
+|---|---|
+| Layout GUI | ✅ 3 columnas — 280+280+resto — todos los textos completos sin corte |
+| Ganancias por defecto | ✅ Kp=6.0 / Kd=0.08 (coherentes con firmware) |
+| Callbacks | ✅ Todos los nombres de variables preservados sin cambios |
+
+### Próximos pasos
+
+1. **Ejecutar verificacion_sistema.py** con robot físico conectado
+2. **Subir firmware** con nuevos parámetros PD (`cd firmware && pio run --target upload`)
+3. **Verificar animación 3D** — en posición cero el brazo debe mostrar la "L invertida"
+
+---
+
 ## 2026-06-14 — Panel izquierdo dos columnas + script de verificación completa
 
 ### Qué se hizo y por qué
