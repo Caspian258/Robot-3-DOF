@@ -4,6 +4,50 @@ Registro de avances por sesión de trabajo. Orden cronológico descendente (más
 
 ---
 
+## 2026-06-14 — Panel izquierdo dos columnas + script de verificación completa
+
+### Qué se hizo y por qué
+
+**Problema 1 — Fix definitivo del scroll del panel izquierdo:**
+
+El `uipanel` con `Scrollable='on'` dentro de un `uigridlayout` no genera scroll en MATLAB/Linux: el grid layout toma control del tamaño del panel y clipa el contenido sin desplazarlo (bug de interacción entre uipanel scrollable y uigridlayout como padre).
+
+Solución: panel izquierdo dividido en **dos columnas** con `uigridlayout [1,2]` sin scroll:
+- Columna L (16 filas, ~504px): DESTINO · SECUENCIA · GANANCIAS PD · ZONA MUERTA
+- Columna R (20 filas, ~724px): CONTROL MANUAL · TEST MOTORES · CONEXIÓN · CERO · FK · LOG
+- Ambas columnas caben en los ~968px disponibles sin necesitar scroll.
+
+**Problema 2 — Script de verificación completa `tools/verificacion_sistema.py`:**
+
+Diagnóstico de 7 pasos ejecutable sin MATLAB. Uso: `python3 tools/verificacion_sistema.py /dev/ttyUSB0`
+
+| Paso | Qué verifica |
+|---|---|
+| 1 | Comunicación serial (20 tramas, frecuencia real, formato D,) |
+| 2 | Estabilidad de encoders en reposo (deriva < 1°, ruido por trama) |
+| 3 | Respuesta por motor: 10°/25°/-10°/-25°/0° con tabla de tiempo de respuesta, error SS y overshoot |
+| 4 | Límites por software (enviar > 80°/45° → verificar LIMIT:Mn) |
+| 5 | Revisión estática del código anti-atasco en firmware (sin prueba física) |
+| 6 | Movimiento combinado 3 motores: T,20,20,20 → T,-20,-20,-20 → ZERO |
+| 7 | Semáforo 🟢/🟡/🔴 con recomendaciones de ajuste PD |
+
+Seguridad: DISARM inmediato si FAULT o error > 30° por > 3s. Siempre termina con ZERO.
+
+### Estado actual
+
+| Componente | Estado |
+|---|---|
+| Panel izquierdo GUI | ✅ Dos columnas — todo el contenido visible sin scroll |
+| Script verificacion_sistema.py | ✅ Listo — pendiente ejecutar con robot físico |
+
+### Próximos pasos
+
+1. **Ejecutar verificacion_sistema.py** con robot físico conectado y confirmar pasos 1-7
+2. **Verificar animación 3D** — en posición cero el brazo debe mostrar la "L invertida"
+3. **Subir firmware** con nuevos parámetros PD (`pio run --target upload`)
+
+---
+
 ## 2026-06-14 — Revisión control PD, corrección visual M2/M3 y mejoras GUI
 
 ### Qué se hizo y por qué
