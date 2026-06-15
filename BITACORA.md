@@ -4,6 +4,54 @@ Registro de avances por sesión de trabajo. Orden cronológico descendente (más
 
 ---
 
+## 2026-06-14 — Kickstart anti-fricción y ajuste de parámetros PD
+
+### Qué se hizo y por qué
+
+Confirmado físicamente: los 3 motores tienen fricción estática alta que impide arrancar desde reposo con parámetros anteriores. Después de descartar causas de software (código simétrico, ZERO limpia todo el estado), la evidencia apunta al hardware: los motores JGA25-370 con su reducción 70:1 tienen fricción estática significativa que requiere un burst de potencia inicial para vencer.
+
+**Cambio 1 — MIN_PWM 30/55 → 60/80:**
+- Zona cercana (error < 6°): 30 → 60
+- Zona lejana (error > 6°): 55 → 80
+- Garantiza torque mínimo suficiente en todo momento, incluso en dirección positiva (contra gravedad)
+
+**Cambio 2 — Kickstart anti-fricción (`kick_ms[3]`, `PWM_KICK=120`):**
+- Al recibir nuevo comando T o al salir de HOLDING por perturbación: `kick_ms[i] = 80` ms
+- Durante esos 80 ms: `power = max(power, 120)` — override del PD calculado
+- Después de 80 ms: retoma control PD normal con parámetros actuales
+- Resetea en ZERO, DISARM y T handler
+- PWM_KICK = 120 < umbral de anti-atasco (150) → no dispara FAULT
+
+**Cambio 3 — Kp 6→8, Kd 0.08→0.10:**
+- Kp más alto: más fuerza proporcional en rango medio (antes: 6×10°=60, ahora: 8×10°=80 PWM)
+- Kd más alto: más amortiguación para compensar el mayor Kp y evitar overshoot
+
+### Parámetros antes y después
+
+| Parámetro | Antes | Después |
+|---|---|---|
+| `Kp` | 6.0 | 8.0 |
+| `Kd` | 0.08 | 0.10 |
+| `min_pwm` (zona cercana, error < 6°) | 30 | 60 |
+| `min_pwm` (zona lejana, error > 6°) | 55 | 80 |
+| Kickstart | — | 120 PWM × 80 ms al arrancar |
+
+### Estado actual
+
+| Componente | Estado |
+|---|---|
+| Firmware kickstart | ✅ Compila [SUCCESS] 21.6% Flash, 6.8% RAM |
+| Upload al ESP32 | ⏳ Pendiente confirmación del usuario |
+
+### Próximos pasos
+
+1. **Subir firmware** y correr `verificacion_sistema.py` para medir mejora
+2. **Si overshoot > 10°**: bajar Kp de 8 a 7
+3. **Si sigue sin arrancar en positivo**: subir PWM_KICK de 120 a 150 (máximo antes de stall)
+4. **Fix pendiente en script**: Fix 6 introduce falsos positivos de LIMIT — inicializar `_printed_limits = set(self.limits_hit)` en vez de `set()`
+
+---
+
 ## 2026-06-14 — Corrección asimetría PD y script de verificación
 
 ### Qué se hizo y por qué

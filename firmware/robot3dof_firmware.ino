@@ -33,8 +33,8 @@ float target_q[3]  = {0.0f, 0.0f, 0.0f};
 float current_q[3] = {0.0f, 0.0f, 0.0f};
 
 // --- GANANCIAS PD ---
-float Kp[3] = {6.0f, 6.0f, 6.0f};
-float Kd[3] = {0.08f, 0.08f, 0.08f};
+float Kp[3] = {8.0f, 8.0f, 8.0f};
+float Kd[3] = {0.10f, 0.10f, 0.10f};
 
 // --- ZONA MUERTA (grados) — reducida de 5° a 2° para responder a ángulos pequeños ---
 float deadband[3] = {2.0f, 2.0f, 2.0f};
@@ -75,6 +75,12 @@ const float RATE_MAX  = 1.0f;
 // Pasa-bajo en la derivada: reduce picos al cambiar setpoint
 float d_prev[3]    = {0.0f, 0.0f, 0.0f};
 const float D_ALPHA = 0.7f;
+
+// --- KICKSTART ANTI-FRICCIÓN ---
+// Al salir de HOLDING aplica PWM_KICK durante kick_ms[i] ms para romper
+// la fricción estática, luego retoma control PD normal.
+const int PWM_KICK = 120;
+int kick_ms[3] = {0, 0, 0};
 
 // ---------------------------------------------------------------
 //  ISRs — Quadratura completa (CHANGE en A y B)
@@ -226,8 +232,9 @@ void controlMotor(int idx, int in1, int in2, int ena) {
     // Reactivar solo si el error supera 1.5× deadband (más sensible que 2×
     // para reducir el salto de corriente al reengancharse)
     if (fabsf(error) > deadband[idx] * 1.5f) {
-      holding[idx] = false;
-      prev_error[idx] = error;   // evitar spike derivativo al reactivar
+      holding[idx]    = false;
+      kick_ms[idx]    = 80;        // kickstart: 80 ms de boost para romper fricción
+      prev_error[idx] = error;     // evitar spike derivativo al reactivar
       last_t[idx]     = millis();
     } else {
       pwm_out[idx] = 0;
@@ -255,13 +262,18 @@ void controlMotor(int idx, int in1, int in2, int ena) {
   d_prev[idx]      = D_ALPHA * d_prev[idx] + (1.0f - D_ALPHA) * d_raw;
   int power = (int)(fabsf(error * Kp[idx] + d_prev[idx] * Kd[idx]));
   if (power > 255) power = 255;
-  // PWM mínimo aumentado para vencer fricción estática asimétrica por carga
-  // gravitacional: en dirección positiva (contra gravedad) el motor necesita
-  // más torque que en negativo. Con Kp=6, a ~5° del target el término
-  // proporcional cae a ~31 PWM — insuficiente para arrancar contra gravedad.
-  // 30 (zona cercana) y 55 (zona lejana) garantizan movimiento en ambas dir.
-  int min_pwm = (fabsf(error) < deadband[idx] * 3.0f) ? 30 : 55;
+  // PWM mínimo elevado para vencer fricción estática alta en los 3 motores.
+  // 60 (zona cercana al target, error < 3×deadband=6°) y 80 (zona lejana).
+  int min_pwm = (fabsf(error) < deadband[idx] * 3.0f) ? 60 : 80;
   if (power < min_pwm) power = min_pwm;
+
+  // Kickstart anti-fricción: durante los primeros kick_ms[idx] ms tras salir
+  // de HOLDING se aplica al menos PWM_KICK=120 para romper fricción estática.
+  if (kick_ms[idx] > 0) {
+    if (power < PWM_KICK) power = PWM_KICK;
+    kick_ms[idx] -= (int)(dt * 1000.0f);
+    if (kick_ms[idx] < 0) kick_ms[idx] = 0;
+  }
 
   pwm_out[idx]    = power;
   prev_error[idx] = error;
@@ -343,8 +355,9 @@ void procesarSerial() {
           }
           d_prev[i] = 0.0f;
         }
-        // Nuevo target → salir de holding, resetear contadores de stall
+        // Nuevo target → salir de holding, resetear contadores y kickstart
         for (int i = 0; i < 3; i++) stall_cnt[i] = 0;
+        for (int i = 0; i < 3; i++) kick_ms[i] = 80;  // kickstart al arrancar
         holding[0] = holding[1] = holding[2] = false;
         armed = true;
       }
@@ -373,7 +386,7 @@ void procesarSerial() {
       encCount[0] = encCount[1] = encCount[2] = 0;
       interrupts();
       target_q[0] = target_q[1] = target_q[2] = 0.0f;
-      for (int i = 0; i < 3; i++) { target_ramp[i] = 0.0f; d_prev[i] = 0.0f; }
+      for (int i = 0; i < 3; i++) { target_ramp[i] = 0.0f; d_prev[i] = 0.0f; kick_ms[i] = 0; }
       holding[0]  = holding[1]  = holding[2]  = true;
       for (int i = 0; i < 3; i++) { fault[i] = false; stall_cnt[i] = 0; }
       armed = false;
@@ -384,7 +397,7 @@ void procesarSerial() {
 
     } else if (data.equals("DISARM")) {
       armed = false;
-      for (int i = 0; i < 3; i++) { fault[i] = false; stall_cnt[i] = 0; }
+      for (int i = 0; i < 3; i++) { fault[i] = false; stall_cnt[i] = 0; kick_ms[i] = 0; }
       apagarMotor(M1_IN1, M1_IN2, M1_ENA);
       apagarMotor(M2_IN1, M2_IN2, M2_ENA);
       apagarMotor(M3_IN1, M3_IN2, M3_ENA);
