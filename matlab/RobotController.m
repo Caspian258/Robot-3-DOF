@@ -1,4 +1,4 @@
-%% 
+%
 % ============================================================
 %  RobotController.m – Robot RRR 3DOF | GUI (Paralelogramo)
 % ============================================================
@@ -54,8 +54,8 @@ pnl.Layout.Row=[1 2]; pnl.Layout.Column=1;
 pg = uigridlayout(pnl,[1,1]); pg.Padding=[8 8 8 8];
 
 % Configuración de filas del layout izquierdo (33 filas en total)
-pnlScroll = uigridlayout(pg,[33,1]);
-pnlScroll.RowHeight = {22,36,36,8, 22,36,36,8, 22,36,36,36,36,8, 22,36,8, 22,44,36,36,8, 36,8, 44,22,36,8, 22,36,36,22,'1x'};
+pnlScroll = uigridlayout(pg,[37,1]);
+pnlScroll.RowHeight = {22,36,36,8, 22,36,36,8, 22,36,36,36,36,8, 22,36,8, 22,22,22,8, 22,44,36,36,8, 36,8, 44,22,36,8, 22,36,36,22,'1x'};
 pnlScroll.RowSpacing = 4;
 
 % [1-4] DESTINO
@@ -93,12 +93,20 @@ uilabel(pnlScroll,'Text',''); % Spacer
 % [15-17] ZONA MUERTA
 mkLabel(pnlScroll,'▸ ZONA MUERTA (°)', 13, [0.7 0.5 0.9]);
 gDB = uigridlayout(pnlScroll,[1,6]); gDB.Padding=[0 0 0 0]; gDB.ColumnSpacing=4;
-uilabel(gDB,'Text','M1','FontColor','w'); efDB1 = mkEdit(gDB, 5.0);
-uilabel(gDB,'Text','M2','FontColor','w'); efDB2 = mkEdit(gDB, 5.0);
-uilabel(gDB,'Text','M3','FontColor','w'); efDB3 = mkEdit(gDB, 5.0);
+uilabel(gDB,'Text','M1','FontColor','w'); efDB1 = mkEdit(gDB, 2.0);
+uilabel(gDB,'Text','M2','FontColor','w'); efDB2 = mkEdit(gDB, 2.0);
+uilabel(gDB,'Text','M3','FontColor','w'); efDB3 = mkEdit(gDB, 2.0);
 uilabel(pnlScroll,'Text',''); % Spacer
 
-% [18-22] TEST DE MOTORES
+% [18-21] CONTROL MANUAL (TECLADO)
+mkLabel(pnlScroll,'▸ CONTROL MANUAL (teclado)', 13, [0.85 0.85 0.50]);
+uilabel(pnlScroll,'Text','A/D → M1 ±5°     W/S → M2 ±5°     Q/E → M3 ±5°',...
+  'FontColor',[0.75 0.75 0.75],'FontSize',10,'BackgroundColor',cPanel);
+uilabel(pnlScroll,'Text','[ESPACIO] → DISARM (emergencia)     [R] → ZERO',...
+  'FontColor',cRed,'FontSize',10,'FontWeight','bold','BackgroundColor',cPanel);
+uilabel(pnlScroll,'Text',''); % Spacer
+
+% [22-26] TEST DE MOTORES
 mkLabel(pnlScroll,'▸ TEST MOTORES', 13, cPurple);
 btnTest = uibutton(pnlScroll,'push','Text','▶  VERIFICAR LOS 3 MOTORES',...
   'BackgroundColor',cPurple,'FontWeight','bold','FontColor','w');
@@ -200,6 +208,7 @@ cbE.ValueChangedFcn        = @(~,~) refrescarGrafica();
 cbPW.ValueChangedFcn       = @(~,~) refrescarGrafica();
 for k=1:3; cbM{k}.ValueChangedFcn = @(~,~) refrescarGrafica(); end
 fig.CloseRequestFcn = @(src,~) cerrar(src);
+fig.KeyPressFcn     = @(~,ev)  teclasRobot(ev);
 
 % Estado del rotate 3D
 rotSt = struct('on',false,'az',45,'el',25,'pt',[0 0]);
@@ -645,6 +654,70 @@ log_('Sistema listo. Conecta el ESP32.');
     st = getappdata(fig,'st');
     if ~st.connected || isempty(st.port) || ~isvalid(st.port); return; end
     try; writeline(st.port, cmd); catch; end
+  end
+
+% ============================================================
+%  CONTROL POR TECLADO
+%  A/D=M1  W/S=M2  Q/E=M3  (±5° por tecla)
+%  Espacio=DISARM  R=ZERO
+% ============================================================
+  function teclasRobot(event)
+    if ~isvalid(fig); return; end
+    st = getSt();
+    if ~st.connected; return; end
+
+    PASO = 5.0;
+    LIMS = [-80 80; -45 45; -45 45];  % [neg pos] por motor en coords firmware
+    tecla = event.Key;
+
+    % Comandos de emergencia/reset
+    if strcmp(tecla,'space')
+      enviarCmd('DISARM');
+      log_('[TECLADO] ESPACIO → DISARM');
+      return;
+    end
+    if strcmpi(tecla,'r')
+      log_('[TECLADO] R → ZERO');
+      ceroRobot();
+      return;
+    end
+
+    % Delta por tecla → coordenadas firmware
+    delta = [0 0 0];
+    switch lower(tecla)
+      case 'a'; delta(1) = +PASO;
+      case 'd'; delta(1) = -PASO;
+      case 'w'; delta(2) = +PASO;
+      case 's'; delta(2) = -PASO;
+      case 'q'; delta(3) = +PASO;
+      case 'e'; delta(3) = -PASO;
+      otherwise; return;
+    end
+
+    % Setpoint actual convertido a coordenadas firmware
+    fw_actual = st.target_q - st.home_q;
+    fw_nuevo  = fw_actual + delta;
+
+    % Aplicar límites
+    nombres_m = {'M1','M2','M3'};
+    for mi = 1:3
+      if fw_nuevo(mi) < LIMS(mi,1)
+        fw_nuevo(mi) = LIMS(mi,1);
+        log_(sprintf('[TECLADO] %s: límite mínimo %.0f°', nombres_m{mi}, LIMS(mi,1)));
+      elseif fw_nuevo(mi) > LIMS(mi,2)
+        fw_nuevo(mi) = LIMS(mi,2);
+        log_(sprintf('[TECLADO] %s: límite máximo %.0f°', nombres_m{mi}, LIMS(mi,2)));
+      end
+    end
+
+    if any(fw_nuevo ~= fw_actual)
+      cmd = sprintf('T,%.2f,%.2f,%.2f', fw_nuevo(1), fw_nuevo(2), fw_nuevo(3));
+      enviarCmd(cmd);
+      st.target_q = fw_nuevo + st.home_q;
+      setSt(st);
+      log_(sprintf('[TECLADO] %s → fw=[%.1f° %.1f° %.1f°]', ...
+        upper(tecla), fw_nuevo(1), fw_nuevo(2), fw_nuevo(3)));
+    end
   end
 
 % ============================================================

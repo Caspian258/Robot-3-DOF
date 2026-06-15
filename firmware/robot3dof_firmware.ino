@@ -20,6 +20,14 @@ const int M3_ENCA = 4;  const int M3_ENCB = 5;
 // --- CONSTANTES ---
 const float PULSOS_POR_VUELTA = 1960.0f;
 
+// Sentido de giro físico por motor respecto a la convención del encoder.
+// true = invertido (verificado 2026-06-14: M2 y M3 van en negativo al pedir positivo).
+const bool INVERTIDO[3] = {false, true, true};
+
+// Límites por software — segunda defensa tras los topes mecánicos físicos.
+const float LIMIT_NEG[3] = {-80.0f, -45.0f, -45.0f};
+const float LIMIT_POS[3] = { 80.0f,  45.0f,  45.0f};
+
 // --- TARGETS Y POSICIÓN ---
 float target_q[3]  = {0.0f, 0.0f, 0.0f};
 float current_q[3] = {0.0f, 0.0f, 0.0f};
@@ -52,6 +60,11 @@ static portMUX_TYPE encMux[3] = {
 float prev_error[3]     = {0, 0, 0};
 unsigned long last_t[3] = {0, 0, 0};
 int pwm_out[3]          = {0, 0, 0};
+
+// --- ANTI-ATASCO ---
+long enc_prev[3]  = {0, 0, 0};
+int  stall_cnt[3] = {0, 0, 0};
+bool fault[3]     = {false, false, false};
 
 // ---------------------------------------------------------------
 //  ISRs — Quadratura completa (CHANGE en A y B)
@@ -179,6 +192,13 @@ void loop() {
 //                    (p.ej. perturbación externa) para reactivar.
 // ---------------------------------------------------------------
 void controlMotor(int idx, int in1, int in2, int ena) {
+  // Motor en FAULT — apagado hasta ZERO o DISARM
+  if (fault[idx]) {
+    apagarMotor(in1, in2, ena);
+    pwm_out[idx] = 0;
+    return;
+  }
+
   float error = target_q[idx] - current_q[idx];
 
   if (holding[idx]) {
@@ -221,7 +241,26 @@ void controlMotor(int idx, int in1, int in2, int ena) {
   prev_error[idx] = error;
   last_t[idx]     = now;
 
-  if (error > 0) {
+  // Detección de atasco: PWM alto y encoder sin avanzar durante 500 ms (50 ciclos)
+  noInterrupts(); long c_now = encCount[idx]; interrupts();
+  if (power > 150 && labs(c_now - enc_prev[idx]) < 5) {
+    if (++stall_cnt[idx] >= 50) {
+      fault[idx] = true;
+      apagarMotor(in1, in2, ena);
+      pwm_out[idx] = 0;
+      char msg[12]; snprintf(msg, sizeof(msg), "FAULT:M%d", idx + 1);
+      Serial.println(msg);
+      enc_prev[idx] = c_now;
+      return;
+    }
+  } else {
+    stall_cnt[idx] = 0;
+  }
+  enc_prev[idx] = c_now;
+
+  // Dirección: XOR con INVERTIDO[] para corregir cableado físico de M2 y M3
+  bool dir_pos = (error > 0) ^ INVERTIDO[idx];
+  if (dir_pos) {
     digitalWrite(in1, HIGH); digitalWrite(in2, LOW);
   } else {
     digitalWrite(in1, LOW);  digitalWrite(in2, HIGH);
@@ -257,7 +296,20 @@ void procesarSerial() {
         target_q[0] = data.substring(2,    c1).toFloat();
         target_q[1] = data.substring(c1+1, c2).toFloat();
         target_q[2] = data.substring(c2+1).toFloat();
-        // Nuevo target → salir de holding en todos los motores
+        // Clampear a límites por software
+        for (int i = 0; i < 3; i++) {
+          if (target_q[i] < LIMIT_NEG[i]) {
+            target_q[i] = LIMIT_NEG[i];
+            char lm[12]; snprintf(lm, sizeof(lm), "LIMIT:M%d", i + 1);
+            Serial.println(lm);
+          } else if (target_q[i] > LIMIT_POS[i]) {
+            target_q[i] = LIMIT_POS[i];
+            char lm[12]; snprintf(lm, sizeof(lm), "LIMIT:M%d", i + 1);
+            Serial.println(lm);
+          }
+        }
+        // Nuevo target → salir de holding, resetear contadores de stall
+        for (int i = 0; i < 3; i++) stall_cnt[i] = 0;
         holding[0] = holding[1] = holding[2] = false;
         armed = true;
       }
@@ -287,6 +339,7 @@ void procesarSerial() {
       interrupts();
       target_q[0] = target_q[1] = target_q[2] = 0.0f;
       holding[0]  = holding[1]  = holding[2]  = true;
+      for (int i = 0; i < 3; i++) { fault[i] = false; stall_cnt[i] = 0; }
       armed = false;
       apagarMotor(M1_IN1, M1_IN2, M1_ENA);
       apagarMotor(M2_IN1, M2_IN2, M2_ENA);
@@ -295,6 +348,7 @@ void procesarSerial() {
 
     } else if (data.equals("DISARM")) {
       armed = false;
+      for (int i = 0; i < 3; i++) { fault[i] = false; stall_cnt[i] = 0; }
       apagarMotor(M1_IN1, M1_IN2, M1_ENA);
       apagarMotor(M2_IN1, M2_IN2, M2_ENA);
       apagarMotor(M3_IN1, M3_IN2, M3_ENA);
