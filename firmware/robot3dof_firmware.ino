@@ -76,11 +76,16 @@ const float RATE_MAX  = 1.0f;
 float d_prev[3]    = {0.0f, 0.0f, 0.0f};
 const float D_ALPHA = 0.7f;
 
-// --- KICKSTART ANTI-FRICCIÓN ---
-// Al salir de HOLDING aplica PWM_KICK durante kick_ms[i] ms para romper
-// la fricción estática, luego retoma control PD normal.
-const int PWM_KICK = 120;
-int kick_ms[3] = {0, 0, 0};
+// --- MIN_PWM Y KICKSTART INDEPENDIENTES POR MOTOR ---
+// Cada articulación tiene fricción estática diferente:
+//   M1 (base,    reducción alta): fricción muy alta → valores mayores
+//   M2 (hombro,  reducción media): fricción media
+//   M3 (codo,    menor carga):     fricción baja
+const int MIN_PWM_CERCA[3] = {100,  75, 60};  // error < 3×deadband (6°)
+const int MIN_PWM_LEJOS[3] = {130, 100, 80};  // error ≥ 6°
+const int KICK_PWM[3]      = {180, 140, 120}; // PWM de arranque por motor
+const int KICK_MS[3]       = {120,  80,  80}; // duración del kick (ms)
+int kick_ms[3] = {0, 0, 0};                   // contador regresivo (estado)
 
 // ---------------------------------------------------------------
 //  ISRs — Quadratura completa (CHANGE en A y B)
@@ -233,7 +238,7 @@ void controlMotor(int idx, int in1, int in2, int ena) {
     // para reducir el salto de corriente al reengancharse)
     if (fabsf(error) > deadband[idx] * 1.5f) {
       holding[idx]    = false;
-      kick_ms[idx]    = 80;        // kickstart: 80 ms de boost para romper fricción
+      kick_ms[idx]    = KICK_MS[idx];  // kickstart por motor para romper fricción
       prev_error[idx] = error;     // evitar spike derivativo al reactivar
       last_t[idx]     = millis();
     } else {
@@ -262,15 +267,16 @@ void controlMotor(int idx, int in1, int in2, int ena) {
   d_prev[idx]      = D_ALPHA * d_prev[idx] + (1.0f - D_ALPHA) * d_raw;
   int power = (int)(fabsf(error * Kp[idx] + d_prev[idx] * Kd[idx]));
   if (power > 255) power = 255;
-  // PWM mínimo elevado para vencer fricción estática alta en los 3 motores.
-  // 60 (zona cercana al target, error < 3×deadband=6°) y 80 (zona lejana).
-  int min_pwm = (fabsf(error) < deadband[idx] * 3.0f) ? 60 : 80;
+  // PWM mínimo independiente por motor (fricción estática diferente por articulación).
+  int min_pwm = (fabsf(error) < deadband[idx] * 3.0f)
+                ? MIN_PWM_CERCA[idx] : MIN_PWM_LEJOS[idx];
   if (power < min_pwm) power = min_pwm;
 
-  // Kickstart anti-fricción: durante los primeros kick_ms[idx] ms tras salir
-  // de HOLDING se aplica al menos PWM_KICK=120 para romper fricción estática.
+  // Kickstart: durante los primeros KICK_MS[idx] ms aplica al menos KICK_PWM[idx].
+  // Nota: KICK_PWM[0]=180 > umbral anti-atasco (150), pero el kick dura solo
+  // 120 ms (12 ciclos), insuficiente para alcanzar los 50 ciclos de FAULT.
   if (kick_ms[idx] > 0) {
-    if (power < PWM_KICK) power = PWM_KICK;
+    if (power < KICK_PWM[idx]) power = KICK_PWM[idx];
     kick_ms[idx] -= (int)(dt * 1000.0f);
     if (kick_ms[idx] < 0) kick_ms[idx] = 0;
   }
@@ -357,7 +363,7 @@ void procesarSerial() {
         }
         // Nuevo target → salir de holding, resetear contadores y kickstart
         for (int i = 0; i < 3; i++) stall_cnt[i] = 0;
-        for (int i = 0; i < 3; i++) kick_ms[i] = 80;  // kickstart al arrancar
+        for (int i = 0; i < 3; i++) kick_ms[i] = KICK_MS[i];  // kickstart por motor
         holding[0] = holding[1] = holding[2] = false;
         armed = true;
       }

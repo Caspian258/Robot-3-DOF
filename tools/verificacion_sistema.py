@@ -124,7 +124,7 @@ class Robot:
         t0 = time.time()
         t_error_alto = {i: None for i in range(3)}
         historia = []
-        _printed_limits = set()
+        _printed_limits = set(self.limits_hit)  # no re-reportar LIMIT de pasos anteriores
 
         while time.time() - t0 < timeout:
             trama = self.leer_trama(timeout=2.0)

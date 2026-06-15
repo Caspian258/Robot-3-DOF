@@ -4,6 +4,51 @@ Registro de avances por sesión de trabajo. Orden cronológico descendente (más
 
 ---
 
+## 2026-06-14 — MIN_PWM y kickstart independientes por motor + fix script
+
+### Qué se hizo y por qué
+
+Mediciones físicas confirmaron que cada articulación tiene fricción estática diferente:
+- M1 (base, reducción 70:1 + masa del brazo completo): fricción muy alta
+- M2 (hombro, levanta el antebrazo): fricción media
+- M3 (codo, carga menor): fricción baja, ya funcionaba bien
+
+**Cambio firmware — arrays por motor (reemplaza escalares globales):**
+
+| Parámetro | M1 (Base) | M2 (Hombro) | M3 (Codo) | Anterior (global) |
+|---|---|---|---|---|
+| `MIN_PWM_CERCA` (error < 6°) | 100 | 75 | 60 | 60 |
+| `MIN_PWM_LEJOS` (error ≥ 6°) | 130 | 100 | 80 | 80 |
+| `KICK_PWM` | 180 | 140 | 120 | 120 |
+| `KICK_MS` (duración) | 120 ms | 80 ms | 80 ms | 80 ms |
+
+Nota: `KICK_PWM[0]=180 > 150` (umbral anti-atasco), pero el kick dura solo 120 ms
+(≈12 ciclos a 100 Hz), insuficiente para alcanzar los 50 ciclos necesarios para
+disparar FAULT. Tras el kick, `MIN_PWM_LEJOS[0]=130 < 150` → anti-atasco en reposo.
+
+**Fix script — falsos positivos de LIMIT en paso 6:**
+
+`_printed_limits = set()` → `_printed_limits = set(self.limits_hit)` en
+`esperar_posicion()`. Ahora solo se reportan mensajes LIMIT NUEVOS en cada llamada;
+los acumulados de paso 4 no se re-imprimen en paso 6.
+
+### Estado actual
+
+| Componente | Estado |
+|---|---|
+| Firmware per-motor | ✅ Compila [SUCCESS] 21.6% Flash, 6.8% RAM |
+| Upload al ESP32 | ⏳ Pendiente confirmación del usuario |
+| Script Fix 6 | ✅ Corregido — no más falsos LIMIT:M3 en paso 6 |
+
+### Próximos pasos
+
+1. **Subir firmware** y correr `verificacion_sistema.py`
+2. **Si M1 sigue sin arrancar**: subir `KICK_PWM[0]` hasta 210, vigilar que
+   FAULT no se dispare (stall_cnt acumula durante kick pero no llega a 50)
+3. **Si M2/M3 muestran overshoot excesivo**: bajar `KICK_PWM` de ese motor
+
+---
+
 ## 2026-06-14 — Kickstart anti-fricción y ajuste de parámetros PD
 
 ### Qué se hizo y por qué
