@@ -4,6 +4,78 @@ Registro de avances por sesión de trabajo. Orden cronológico descendente (más
 
 ---
 
+## 2026-06-14 — Corrección asimetría PD y script de verificación
+
+### Qué se hizo y por qué
+
+**Diagnóstico (verificacion_sistema.py con robot físico):**
+
+| Motor | Dirección | Pedido | Llegó | Error SS |
+|---|---|---|---|---|
+| M1 | positivo | +10° | 4.8° | -5.2° |
+| M1 | positivo | +25° | 15.1° | -9.9° |
+| M1 | negativo | -10° | -8.8° | +1.2° |
+| M2 | positivo | +10° | 3.5° | -6.5° |
+| M3 | positivo | +10° | 7.0° | -3.0° |
+
+Patrón: todos los motores se quedan cortos en positivo, negativos funcionan mejor.
+
+**Análisis de causa raíz (dos agentes en paralelo):**
+
+El código de control es 100% simétrico (L223, L256, L259, L284, L175 del firmware).
+La asimetría es física: la carga gravitacional requiere más torque en dirección positiva
+(contra gravedad). Con Kp=6, a ~5° del target el término proporcional = 31 PWM, y
+`min_pwm = 20` (error < 3×deadband = 6°) → motor no vence la fricción estática. En
+negativo, la gravedad asiste y 31 PWM es suficiente.
+
+**Fix 1 — Firmware: `min_pwm` 20/35 → 30/55 (L259 firmware):**
+
+Garantiza torque mínimo suficiente en ambas direcciones, independiente del Kp.
+El término 30 aplica cerca del target (error < 6°) y 55 fuera de esa zona.
+No cambia la dinámica de control, solo el piso de esfuerzo.
+
+**Fix 2 — Script: lista de pruebas de límites incompleta:**
+
+La lista `pruebas` en `paso4_limites_software` solo cubría 4 de los 6 casos.
+Añadidos M2 negativo (−50° → −45°) y M3 negativo (−50° → −45°).
+
+**Fix 3 — Script: timeout adaptativo:**
+
+`timeout_adap = 4.0 if abs(angulo_fw) <= 15 else 8.0` — evita falsas alarmas de
+timeout en movimientos pequeños y da tiempo suficiente a los grandes.
+
+**Fix 4 — Script: retorno a cero más estricto:**
+
+`db=5.0° → db=2.0°` en el retorno entre pruebas — garantiza que cada prueba
+parte de 0° ± 2° (= deadband) en lugar de 0° ± 5°.
+
+**Fix 5 — Script: reemplazar sleep(1.5) en paso4:**
+
+`time.sleep(1.5) → robot.esperar_posicion([0,0,0], db=3.0, timeout=4.0)` —
+verifica posición real en vez de esperar a ciegas.
+
+**Fix 6 — Script: log de LIMIT: durante movimiento:**
+
+`esperar_posicion()` ahora imprime cada mensaje LIMIT: nuevo que recibe durante
+el movimiento, con color amarillo.
+
+### Estado actual
+
+| Componente | Estado |
+|---|---|
+| Firmware min_pwm | ✅ 30/55 — compila [SUCCESS] 21.6% Flash, 6.8% RAM |
+| Script límites | ✅ 6 casos (±M1/M2/M3) |
+| Script timeout | ✅ Adaptativo: 4s ≤15°, 8s >15° |
+| Script retorno cero | ✅ db=2° (era 5°) |
+
+### Próximos pasos
+
+1. **Subir firmware** (`cd firmware && pio run --target upload`) — pendiente confirmación
+2. **Ejecutar verificacion_sistema.py** nuevamente para confirmar que la asimetría se reduce
+3. **Si persiste el undershoot**: aumentar Kp de 6→8 para aumentar torque proporcional
+
+---
+
 ## 2026-06-14 — Rediseño GUI en 3 columnas
 
 ### Qué se hizo y por qué

@@ -124,9 +124,14 @@ class Robot:
         t0 = time.time()
         t_error_alto = {i: None for i in range(3)}
         historia = []
+        _printed_limits = set()
 
         while time.time() - t0 < timeout:
             trama = self.leer_trama(timeout=2.0)
+            for lm in self.limits_hit:
+                if lm not in _printed_limits:
+                    print(color(f'  ⚠ {lm} — límite clampeado durante movimiento', YELLOW))
+                    _printed_limits.add(lm)
             if trama is None:
                 if self.faults:
                     return False, (time.time() - t0) * 1000, historia
@@ -256,7 +261,8 @@ def paso3_respuesta_motores(robot):
             targets = [0.0, 0.0, 0.0]
             targets[motor - 1] = float(angulo_fw)
 
-            llegó, t_ms, historia = robot.esperar_posicion(targets, db=DB_LLEGADA, timeout=TIMEOUT)
+            timeout_adap = 4.0 if abs(angulo_fw) <= 15 else 8.0
+            llegó, t_ms, historia = robot.esperar_posicion(targets, db=DB_LLEGADA, timeout=timeout_adap)
 
             if robot.faults:
                 err(f'FAULT detectado: {robot.faults[-1]} — abortando')
@@ -284,7 +290,7 @@ def paso3_respuesta_motores(robot):
 
             # Volver a cero entre pruebas
             robot.enviar('T,0.00,0.00,0.00')
-            robot.esperar_posicion([0.0, 0.0, 0.0], db=5.0, timeout=6.0)
+            robot.esperar_posicion([0.0, 0.0, 0.0], db=2.0, timeout=6.0)
 
             if hay_fault:
                 break
@@ -316,10 +322,12 @@ def paso4_limites_software(robot):
     titulo('PASO 4 — Verificación de límites por software')
 
     pruebas = [
-        (1, 90.0,  80.0, 'LIMIT:M1'),
-        (2, 50.0,  45.0, 'LIMIT:M2'),
-        (3, 50.0,  45.0, 'LIMIT:M3'),
-        (1, -90.0, -80.0,'LIMIT:M1'),
+        (1,  90.0,  80.0, 'LIMIT:M1'),
+        (2,  50.0,  45.0, 'LIMIT:M2'),
+        (3,  50.0,  45.0, 'LIMIT:M3'),
+        (1, -90.0, -80.0, 'LIMIT:M1'),
+        (2, -50.0, -45.0, 'LIMIT:M2'),
+        (3, -50.0, -45.0, 'LIMIT:M3'),
     ]
 
     todos_ok = True
@@ -340,7 +348,7 @@ def paso4_limites_software(robot):
             todos_ok = False
 
         robot.enviar('T,0.00,0.00,0.00')
-        time.sleep(1.5)
+        robot.esperar_posicion([0.0, 0.0, 0.0], db=3.0, timeout=4.0)
 
     return todos_ok
 
