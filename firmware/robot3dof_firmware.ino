@@ -255,8 +255,12 @@ void controlMotor(int idx, int in1, int in2, int ena) {
   d_prev[idx]      = D_ALPHA * d_prev[idx] + (1.0f - D_ALPHA) * d_raw;
   int power = (int)(fabsf(error * Kp[idx] + d_prev[idx] * Kd[idx]));
   if (power > 255) power = 255;
-  // PWM mínimo proporcional al error para arranque suave cerca de la zona muerta
-  int min_pwm = (fabsf(error) < deadband[idx] * 3.0f) ? 20 : 35;
+  // PWM mínimo aumentado para vencer fricción estática asimétrica por carga
+  // gravitacional: en dirección positiva (contra gravedad) el motor necesita
+  // más torque que en negativo. Con Kp=6, a ~5° del target el término
+  // proporcional cae a ~31 PWM — insuficiente para arrancar contra gravedad.
+  // 30 (zona cercana) y 55 (zona lejana) garantizan movimiento en ambas dir.
+  int min_pwm = (fabsf(error) < deadband[idx] * 3.0f) ? 30 : 55;
   if (power < min_pwm) power = min_pwm;
 
   pwm_out[idx]    = power;
